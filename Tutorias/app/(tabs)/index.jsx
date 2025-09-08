@@ -12,7 +12,7 @@ export default function App() {
       {/* ================= LOGIN ================= */}
       <TouchableOpacity
         style={[styles.button, styles.signupButton]}
-        onPress={() => router.push("/login")}
+        onPress={() => { console.log('Navigate: /login'); router.push("/login"); }}
       >
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
@@ -20,7 +20,7 @@ export default function App() {
       {/* ================= SIGNUP ================= */}
       <TouchableOpacity
         style={[styles.button, styles.signupButton]}
-        onPress={() => router.push("/signup")}
+        onPress={() => { console.log('Navigate: /signup'); router.push("/signup"); }}
       >
         <Text style={styles.buttonText}>Signup</Text>
       </TouchableOpacity>

@@ -1,8 +1,7 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// Firebase core (browser + RN). Avoid top-level analytics usage to support SSR/static.
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -13,12 +12,28 @@ const firebaseConfig = {
   storageBucket: "tutorias-7d6f0.firebasestorage.app",
   messagingSenderId: "412453792118",
   appId: "1:412453792118:web:34833aee42520382357257",
-  measurementId: "G-RM7NE9ZN4L"
+  measurementId: "G-RM7NE9ZN4L",
 };
 
+// Initialize (or reuse) the Firebase app instance
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// Export commonly used SDKs
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
+// Lazily initialize Analytics only in the browser to avoid "window is not defined" during SSR/static
+export const initAnalytics = async () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const { isSupported, getAnalytics } = await import("firebase/analytics");
+    if (await isSupported()) {
+      return getAnalytics(app);
+    }
+  } catch (e) {
+    // noop: analytics not available in this environment
+  }
+  return null;
+};
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+export default app;
