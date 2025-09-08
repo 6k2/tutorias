@@ -1,18 +1,16 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image } from "react-native";
-import { useRouter } from "expo-router";   // 👈 Importamos router
+import { useRouter } from "expo-router";
 
-export default function SignUpScreen() {
-  const router = useRouter();              // 👈 Instanciamos router
-  const [role, setRole] = useState<string | null>(null);
-  const [username, setUsername] = useState("");
+export default function LoginScreen() {
+  const router = useRouter();
+  const [role, setRole] = useState(null); // 🔹 ya no lleva <string | null>
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign up</Text>
+      <Text style={styles.title}>Login</Text>
 
       <Text style={styles.subtitle}>WHO YOU ARE?</Text>
 
@@ -25,22 +23,15 @@ export default function SignUpScreen() {
           <Text style={styles.roleText}>Student</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setRole("teacher")}>
+        <TouchableOpacity onPress={() => setRole("Teacher")}>
           <Image
             source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/teacher.png" }}
-            style={[styles.roleIcon, role === "teacher" && styles.selectedRole]}
+            style={[styles.roleIcon, role === "Teacher" && styles.selectedRole]}
           />
-          <Text style={styles.roleText}>TEACHER</Text>
+          <Text style={styles.roleText}>Teacher</Text>
         </TouchableOpacity>
       </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="#aaa"
-        value={username}
-        onChangeText={setUsername}
-      />
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -49,6 +40,7 @@ export default function SignUpScreen() {
         onChangeText={setEmail}
         keyboardType="email-address"
       />
+
       <TextInput
         style={styles.input}
         placeholder="Password"
@@ -57,33 +49,31 @@ export default function SignUpScreen() {
         value={password}
         onChangeText={setPassword}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-      />
 
-      <TouchableOpacity style={styles.signupBtn}>
-        <Text style={styles.signupText}>SIGNUP</Text>
+      <TouchableOpacity
+        style={styles.signupBtn}
+        onPress={() => {
+          // TODO: agregar lógica de autenticación (Firebase, validaciones, etc.)
+          console.log("Login pressed", { role, email });
+        }}
+      >
+        <Text style={styles.signupText}>LOGIN</Text>
       </TouchableOpacity>
 
-      {/* Footer con link a Login */}
       <Text style={styles.footer}>
-        Already have an account?{" "}
+        Don’t have an account?{" "}
         <Text
           style={styles.loginLink}
-          onPress={() => router.push("/login")}   // 👈 Navegación
+          onPress={() => router.push("/signup")}
         >
-          Login here
+          Sign up here
         </Text>
       </Text>
     </View>
   );
 }
 
+/* estilos compartidos */
 const styles = StyleSheet.create({
   container: {
     flex: 1,

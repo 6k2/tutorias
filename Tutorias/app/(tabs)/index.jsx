@@ -3,18 +3,19 @@ import { useRouter } from "expo-router";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 
 export default function App() {
-    const router = useRouter();
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Pantalla Home</Text>
 
       {/* ================= LOGIN ================= */}
       <TouchableOpacity
-              style={[styles.button, styles.signupButton]}
-              onPress={() => router.push("/login")}
-            >
-              <Text style={styles.buttonText}>Login</Text>
-            </TouchableOpacity>
+        style={[styles.button, styles.signupButton]}
+        onPress={() => router.push("/login")}
+      >
+        <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
 
       {/* ================= SIGNUP ================= */}
       <TouchableOpacity
@@ -26,11 +27,6 @@ export default function App() {
     </View>
   );
 }
-
-
-
-
-
 
 const styles = StyleSheet.create({
   container: {
