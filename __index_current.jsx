@@ -6,35 +6,21 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
   Animated,
   useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { auth, db } from "../config/firebase";
-import { doc, getDoc } from "firebase/firestore";
 
 export default function HomeScreen() {
   const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
   const [isAuthed, setIsAuthed] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [role, setRole] = useState("");
 
   useEffect(() => {
     const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, async (u) => {
+    const unsub = onAuthStateChanged(require('../config/firebase').auth, (u) => {
       setIsAuthed(!!u);
-      if (u) {
-        try {
-          const ref = doc(db, 'users', u.uid);
-          const snap = await getDoc(ref);
-          const d = snap.data() || {};
-          setRole(d.role || "");
-        } catch {}
-      } else {
-        setRole("");
-      }
-      setAuthChecked(true);
     });
     return () => unsub();
   }, []);
@@ -89,11 +75,16 @@ export default function HomeScreen() {
         Animated.timing(cardAnims[i], {
           toValue: 1,
           duration: 450,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }).start();
       }
     });
   };
+
+  const openInspect = (name) => {
+    Alert.alert("No disponible", `${name} aún no está disponible`);
+  };
+
   return (
     <View style={styles.screen}>
       <Animated.ScrollView
@@ -110,7 +101,7 @@ export default function HomeScreen() {
         >
           <Text style={styles.heroTitle}>TUTORIAS</Text>
           <Text style={styles.heroSubtitle}>Reserva clases, edita tu perfil y chatea</Text>
-          {authChecked && !isAuthed && (
+          {!isAuthed && (
             <View style={styles.heroActions}>
               <TouchableOpacity
                 style={styles.heroBtn}
@@ -167,24 +158,12 @@ export default function HomeScreen() {
                 <Image source={{ uri: s.image }} style={styles.cardImage} resizeMode="cover" />
                 <View style={styles.cardBody}>
                   <Text style={styles.cardTitle}>{s.title}</Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      style={styles.inspectBtn}
-                      onPress={() => router.push(`/inspect/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`)}
-                    >
-                      <Text style={styles.inspectText}>INSPECCIONAR</Text>
-                    </TouchableOpacity>
-                    {(role || '').toLowerCase() === 'teacher' && (
-                      <TouchableOpacity
-                        style={styles.matricularBtn}
-                        onPress={() => router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`)}
-                      >
-                        <LinearGradient colors={["#34D399", "#10B981"]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.matricularBg}>
-                          <Text style={styles.inspectText}>MATRICULAR</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  <TouchableOpacity
+                    style={styles.inspectBtn}
+                    onPress={() => openInspect(s.title)}
+                  >
+                    <Text style={styles.inspectText}>INSPECCIONAR</Text>
+                  </TouchableOpacity>
                 </View>
               </Animated.View>
             );
@@ -253,7 +232,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingHorizontal: 16,
-    paddingTop: 28,
+    paddingTop: 24,
     gap: 12,
   },
   sectionTitle: {
@@ -295,13 +274,5 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  matricularBtn: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  matricularBg: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-  },
 });
+

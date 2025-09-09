@@ -14,30 +14,48 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
+        tabBarShowLabel: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
+        tabBarActiveTintColor: '#FF8E53',
+        tabBarInactiveTintColor: '#8C8FA5',
         tabBarStyle: Platform.select({
           ios: {
-            // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
+            marginHorizontal: 12,
+            marginBottom: 12,
+            borderRadius: 20,
+            height: 64,
+            backgroundColor: 'rgba(28,31,54,0.85)',
+            borderTopWidth: 0,
           },
-          default: {},
+          default: {
+            marginHorizontal: 12,
+            marginBottom: 12,
+            borderRadius: 20,
+            height: 64,
+            backgroundColor: '#1F223D',
+            borderTopWidth: 0,
+          },
         }),
       }}>
       <Tabs.Screen
+        name="profile"
+        options={{
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.circle" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="chats"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
         }}
       />
     </Tabs>

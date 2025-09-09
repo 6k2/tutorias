@@ -22,19 +22,9 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   console.log("SignUp: screen mounted");
-
-  React.useEffect(() => {
-    const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, (u) => {
-      if (u) router.replace('/');
-    });
-    return () => unsub();
-  }, [router]);
 
   const onSignup = async () => {
     console.log("SignUp: onSignup clicked");
@@ -80,7 +70,9 @@ export default function SignUpScreen() {
       });
 
       console.log("SignUp: success", { uid });
-      router.replace("/");
+      Alert.alert("Registro completado", "Tu cuenta fue creada correctamente", [
+        { text: "OK", onPress: () => router.replace("/") },
+      ]);
     } catch (e) {
       console.error("SignUp error", e);
       let msg = "No se pudo crear la cuenta";
@@ -111,13 +103,13 @@ export default function SignUpScreen() {
           <Text style={styles.roleText}>Student</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setRole("Teacher")}>
+        <TouchableOpacity onPress={() => setRole("teacher")}>
           <Image
             source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/teacher.png" }}
             tintColor="#fff"
-            style={[styles.roleIcon, role === "Teacher" && styles.selectedRole]}
+            style={[styles.roleIcon, role === "teacher" && styles.selectedRole]}
           />
-          <Text style={styles.roleText}>Teacher</Text>
+          <Text style={styles.roleText}>TEACHER</Text>
         </TouchableOpacity>
       </View>
 
@@ -137,42 +129,22 @@ export default function SignUpScreen() {
         keyboardType="email-address"
         autoCapitalize="none"
       />
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={[styles.input, { paddingRight: 44 }]}
-          placeholder="Password"
-          placeholderTextColor="#aaa"
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
-        />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          onPress={() => setShowPassword((v) => !v)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
-        </TouchableOpacity>
-      </View>
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={[styles.input, { paddingRight: 44 }]}
-          placeholder="Confirm Password"
-          placeholderTextColor="#aaa"
-          secureTextEntry={!showConfirmPassword}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          onPress={() => setShowConfirmPassword((v) => !v)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons name={showConfirmPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
-        </TouchableOpacity>
-      </View>
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        placeholderTextColor="#aaa"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Confirm Password"
+        placeholderTextColor="#aaa"
+        secureTextEntry
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+      />
 
       {error && (
         <View style={styles.errorBox}>
@@ -252,17 +224,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     color: "#fff",
   },
-  inputWrapper: {
-    width: '100%',
-    position: 'relative',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 12,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
   signupBtn: {
     backgroundColor: "#FF8E53",
     width: "100%",
@@ -302,3 +263,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+

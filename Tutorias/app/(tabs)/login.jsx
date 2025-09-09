@@ -5,22 +5,45 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Image,
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useTopAlert } from "../../components/TopAlert";
 import { auth } from "../config/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { MaterialIcons } from "@expo/vector-icons";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [role, setRole] = useState(null);
+  const params = useLocalSearchParams();
+  const topAlert = useTopAlert();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  React.useEffect(() => {
+    const { onAuthStateChanged } = require('firebase/auth');
+    const unsub = onAuthStateChanged(require('../config/firebase').auth, (u) => {
+      if (u) router.replace('/');
+    });
+    return () => unsub();
+  }, [router]);
+
+  // Show incoming auth-required alert (e.g., redirected from Profile/Agenda)
+  React.useEffect(() => {
+    const dest = params?.dest || 'esta sección';
+    const should = params?.alert === 'needAuth';
+    let t;
+    if (should) {
+      t = setTimeout(() => {
+        topAlert.show(`Debes iniciar sesión/Registrarme para acceder a: ${dest}`, 'info');
+      }, 1200);
+    }
+    return () => clearTimeout(t);
+  }, [params]);
 
   const onLogin = async () => {
     try {
@@ -57,27 +80,6 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
 
-      <Text style={styles.subtitle}>WHO YOU ARE?</Text>
-
-      <View style={styles.roles}>
-        <TouchableOpacity onPress={() => setRole("Student")}>
-          <Image
-            source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/user-female.png" }}
-            tintColor="#fff"
-            style={[styles.roleIcon, role === "Student" && styles.selectedRole]}
-          />
-          <Text style={styles.roleText}>Student</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setRole("Teacher")}>
-          <Image
-            source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/teacher.png" }}
-            tintColor="#fff"
-            style={[styles.roleIcon, role === "Teacher" && styles.selectedRole]}
-          />
-          <Text style={styles.roleText}>Teacher</Text>
-        </TouchableOpacity>
-      </View>
 
       <TextInput
         style={styles.input}
@@ -89,14 +91,24 @@ export default function LoginScreen() {
         autoCapitalize="none"
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#aaa"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+      <View style={styles.inputWrapper}>
+        <TextInput
+          style={[styles.input, { paddingRight: 44 }]}
+          placeholder="Password"
+          placeholderTextColor="#aaa"
+          secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
+        />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          onPress={() => setShowPassword((v) => !v)}
+          style={styles.eyeIcon}
+        >
+          <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
+        </TouchableOpacity>
+      </View>
 
       {error && (
         <View style={styles.errorBox}>
@@ -138,33 +150,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 10,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#aaa",
-    marginBottom: 20,
-  },
-  roles: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 20,
-  },
-  roleIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 5,
-    alignSelf: "center",
-  },
-  selectedRole: {
-    borderWidth: 2,
-    borderColor: "#FF7F50",
-  },
-  roleText: {
-    color: "#fff",
-    fontSize: 12,
-    textAlign: "center",
-  },
+  subtitle: { display: 'none' },
   input: {
     width: "100%",
     backgroundColor: "#2C2F48",
@@ -172,6 +158,17 @@ const styles = StyleSheet.create({
     padding: 15,
     marginVertical: 8,
     color: "#fff",
+  },
+  inputWrapper: {
+    width: '100%',
+    position: 'relative',
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
   signupBtn: {
     backgroundColor: "#FF8E53",
