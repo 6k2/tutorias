@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { useTopAlert } from '../../components/TopAlert';
 
 export default function InspectSubjectScreen() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function InspectSubjectScreen() {
   const subjectName = decodeURIComponent(name || subjectKey);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const topAlert = useTopAlert();
 
   useEffect(() => {
     let mounted = true;
@@ -68,7 +70,7 @@ export default function InspectSubjectScreen() {
                   {available ? 'DISPONIBLE' : 'OCUPADO'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => router.push(`/inspect/${encodeURIComponent(subjectKey)}/detail/${encodeURIComponent(it.id)}`)} style={styles.moreBtn}>
+              <TouchableOpacity onPress={() => topAlert.show('Módulo, próximamente', 'info')} style={styles.moreBtn}>
                 <Text style={styles.moreText}>➜</Text>
               </TouchableOpacity>
             </View>

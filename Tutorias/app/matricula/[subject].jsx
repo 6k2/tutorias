@@ -21,6 +21,8 @@ export default function MatriculaScreen() {
   const [maxStudents, setMaxStudents] = useState('');
   const [price, setPrice] = useState('');
   const [images, setImages] = useState([]);
+  const MAX_IMAGES = 1;
+  const MAX_BYTES = 8 * 1024 * 1024; // 8MB
   const hours = useMemo(() => [6,8,10,12,14,16,18,20], []);
   const days = useMemo(() => ['Lun','Mar','Mié','Jue','Vie','Sáb'], []);
   const [selected, setSelected] = useState({}); // key: `${d}-${h}`
@@ -115,7 +117,20 @@ export default function MatriculaScreen() {
         createdAt: serverTimestamp(),
       };
       const id = `${user.uid}_${subjectKey}`;
-      await setDoc(doc(db, 'offers', id), payload, { merge: true });
+      // Prevent duplicate offer for same subject by same teacher
+      const mainRef = doc(db, 'offers', id);
+      const mainSnap = await getDoc(mainRef);
+      if (mainSnap.exists()) {
+        topAlert.show('Ya tienes una tutoría creada para esta materia', 'error');
+        return;
+      }
+      const userRef = doc(db, 'users', user.uid, 'offers', subjectKey);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        topAlert.show('Ya tienes una tutoría creada para esta materia', 'error');
+        return;
+      }
+      await setDoc(mainRef, payload, { merge: false });
       topAlert.show('Oferta guardada', 'success');
       router.back();
     } catch (e) {
@@ -131,7 +146,7 @@ export default function MatriculaScreen() {
         // Fallback: intenta guardar en subcolección del usuario por si las reglas lo requieren
         try {
           const id2 = `${subjectKey}`;
-          await setDoc(doc(db, 'users', user.uid, 'offers', id2), payload, { merge: true });
+          await setDoc(doc(db, 'users', user.uid, 'offers', id2), payload, { merge: false });
           topAlert.show('Oferta guardada', 'success');
           router.back();
           return;
