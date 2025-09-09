@@ -102,9 +102,24 @@ export default function MatriculaScreen() {
     let payload;
     try {
       if (!user) return;
-      const blocks = Object.entries(selected)
-        .filter(([, v]) => v)
-        .map(([k]) => { const [d, h] = k.split('-').map(Number); return { day: days[d], hourStart: h, hourEnd: h + 2 }; });
+      // Build schedule blocks; if an entire day is selected, compress into a single wide block
+      const chosen = Object.entries(selected).filter(([, v]) => v);
+      const byDay = {};
+      for (const [k] of chosen) {
+        const [d, h] = k.split('-').map(Number);
+        if (!byDay[d]) byDay[d] = new Set();
+        byDay[d].add(h);
+      }
+      const blocks = [];
+      Object.keys(byDay).forEach((dKey) => {
+        const d = Number(dKey);
+        const hs = Array.from(byDay[d]).sort((a, b) => a - b);
+        if (hs.length === hours.length) {
+          blocks.push({ day: days[d], hourStart: hs[0], hourEnd: hs[hs.length - 1] + 2 });
+        } else {
+          hs.forEach((h) => blocks.push({ day: days[d], hourStart: h, hourEnd: h + 2 }));
+        }
+      });
 
       const maxVal = Math.max(0, parseInt(maxStudents || '0', 10));
       const priceVal = Math.max(0, parseFloat(price || '0'));
@@ -112,7 +127,18 @@ export default function MatriculaScreen() {
       if (!maxVal || maxVal < 1) { topAlert.show('Define el máximo de alumnos (mín 1)', 'error'); return; }
       if (priceVal < 0) { topAlert.show('El precio no puede ser negativo', 'error'); return; }
 
-      const usernameSafe = (user.displayName || (user.email ? String(user.email).split('@')[0] : ''));
+      // Prefer username from profile; fallback to displayName or email local-part
+      let usernameSafe = user.displayName || '';
+      try {
+        const uSnap = await getDoc(doc(db, 'users', user.uid));
+        const d = uSnap.data() || {};
+        if (typeof d.username === 'string' && d.username.trim()) {
+          usernameSafe = d.username.trim();
+        }
+      } catch {}
+      if (!usernameSafe) {
+        usernameSafe = user.email ? String(user.email).split('@')[0] : 'Docente';
+      }
       payload = {
         uid: user.uid,
         username: usernameSafe,
@@ -135,6 +161,7 @@ export default function MatriculaScreen() {
       topAlert.show('Oferta guardada', 'success');
       router.back();
     } catch (e) {
+      try { if (e && e.message) topAlert.show(`Error: ${e.message}`, 'error'); } catch {}
       // fallback if rules solo permiten subcolección del usuario
       try {
         const id2 = `${subjectKey}`;

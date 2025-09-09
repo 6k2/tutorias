@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
 
@@ -25,6 +25,19 @@ export default function InspectSubjectScreen() {
         const rows = [];
         snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
         if (mounted) setItems(rows);
+        // fetch display usernames for each uid (override stored username if profile has one)
+        const uids = Array.from(new Set(rows.map(r => r.uid).filter(Boolean)));
+        const names = {};
+        await Promise.all(
+          uids.map(async (uid) => {
+            try {
+              const us = await getDoc(doc(db, 'users', uid));
+              const d = us.data() || {};
+              if (typeof d.username === 'string' && d.username.trim()) names[uid] = d.username.trim();
+            } catch {}
+          })
+        );
+        if (mounted) setUsernames(names);
       } catch (e) {
         if (mounted) setItems([]);
       } finally {
@@ -35,6 +48,7 @@ export default function InspectSubjectScreen() {
     return () => { mounted = false; };
   }, [subjectKey]);
 
+  const [usernames, setUsernames] = useState({});
   const empty = !loading && items.length === 0;
 
   return (
@@ -48,10 +62,10 @@ export default function InspectSubjectScreen() {
         </TouchableOpacity>
       </View>
       <Text style={styles.title}>Docentes en {subjectName}</Text>
-      {loading && <Text style={styles.note}>Cargando…</Text>}
+      {loading && <Text style={styles.note}>Cargandoâ€¦</Text>}
       {empty && (
         <View style={styles.row}>
-          <Text style={styles.rowTitle}>No hay clases disponibles todavía.</Text>
+          <Text style={styles.rowTitle}>No hay clases disponibles todavÃ­a.</Text>
         </View>
       )}
       {items.map((it) => {
@@ -61,7 +75,7 @@ export default function InspectSubjectScreen() {
         return (
           <View key={it.id} style={styles.row}>
             <View>
-              <Text style={styles.rowTitle}>{it.username || it.uid || 'Docente'}</Text>
+              <Text style={styles.rowTitle}>{usernames[it.uid] || it.username || 'Docente'}</Text>
               <Text style={styles.rowSub}>Cupos: {enrolled}/{max || '∞'}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -70,8 +84,8 @@ export default function InspectSubjectScreen() {
                   {available ? 'DISPONIBLE' : 'OCUPADO'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => topAlert.show('Módulo, próximamente', 'info')} style={styles.moreBtn}>
-                <Text style={styles.moreText}>➜</Text>
+              <TouchableOpacity onPress={() => topAlert.show('MÃ³dulo, prÃ³ximamente', 'info')} style={styles.moreBtn}>
+                <Text style={styles.moreText}>âžœ</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -105,3 +119,4 @@ const styles = StyleSheet.create({
   moreBtn: { backgroundColor: '#FF8E53', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
   moreText: { color: '#fff', fontWeight: '900' },
 });
+
