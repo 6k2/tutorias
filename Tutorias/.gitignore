@@ -7,7 +7,7 @@ node_modules/
 .expo/
 dist/
 web-build/
-expo-env.d.ts
+# (no TS typings file needed for JS-only)
 
 # Native
 .kotlin/
@@ -33,7 +33,7 @@ yarn-error.*
 # local env files
 .env*.local
 
-# typescript
-*.tsbuildinfo
+# TypeScript artifacts (none used)
+# *.tsbuildinfo
 
 app-example

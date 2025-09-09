@@ -1,6 +1,8 @@
 // Firebase core (browser + RN). Avoid top-level analytics usage to support SSR/static.
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
@@ -19,7 +21,20 @@ const firebaseConfig = {
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Export commonly used SDKs
-export const auth = getAuth(app);
+// Use persistent auth on native with AsyncStorage; web uses default
+let _auth;
+if (Platform.OS === "web") {
+  _auth = getAuth(app);
+} else {
+  try {
+    _auth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch (e) {
+    _auth = getAuth(app);
+  }
+}
+export const auth = _auth;
 export const db = getFirestore(app);
 
 // Lazily initialize Analytics only in the browser to avoid "window is not defined" during SSR/static

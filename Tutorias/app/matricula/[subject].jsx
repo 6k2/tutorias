@@ -79,12 +79,7 @@ export default function MatriculaScreen() {
   };
 
   const pickImage = async () => {
-    const opts = { quality: 0.7 };
-    try {
-      if (ImagePicker?.MediaType?.Images) opts.mediaTypes = [ImagePicker.MediaType.Images];
-      else if (ImagePicker?.MediaTypeOptions?.Images) opts.mediaTypes = ImagePicker.MediaTypeOptions.Images;
-      else opts.mediaTypes = ['images'];
-    } catch {}
+    const opts = { quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images' };
     const res = await ImagePicker.launchImageLibraryAsync(opts);
     if (res.canceled || !res.assets?.[0]?.uri) return;
     const asset = res.assets[0];
@@ -104,6 +99,7 @@ export default function MatriculaScreen() {
   const removeImage = (idx) => setImages((arr) => arr.filter((_, i) => i !== idx));
 
   const save = async () => {
+    let payload;
     try {
       if (!user) return;
       const blocks = Object.entries(selected)
@@ -117,7 +113,7 @@ export default function MatriculaScreen() {
       if (priceVal < 0) { topAlert.show('El precio no puede ser negativo', 'error'); return; }
 
       const usernameSafe = (user.displayName || (user.email ? String(user.email).split('@')[0] : ''));
-      const payload = {
+      payload = {
         uid: user.uid,
         username: usernameSafe,
         subject: subjectKey,

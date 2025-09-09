@@ -6,5 +6,17 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*'],
+    settings: {
+      'import/resolver': {
+        alias: {
+          map: [['@', './']],
+          extensions: ['.js', '.jsx', '.json'],
+        },
+      },
+    },
+    rules: {
+      // Keep imports working with our Babel alias in lint
+      'import/no-unresolved': 'off',
+    },
   },
 ]);

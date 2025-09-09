@@ -2,8 +2,8 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { auth } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
-import CustomTabBar from '@/components/CustomTabBar';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import CustomTabBar from '../../components/CustomTabBar';
+import { IconSymbol } from '../../components/ui/IconSymbol';
 
 export default function TabLayout() {
   const topAlert = useTopAlert();
