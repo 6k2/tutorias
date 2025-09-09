@@ -15,7 +15,7 @@ export default function AgendaScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={{ alignSelf: 'stretch', paddingHorizontal: 20, paddingTop: (insets?.top ?? 0) + 12, marginBottom: 12 }}>
+      <View style={{ alignSelf: 'stretch', paddingHorizontal: 20, paddingTop: (insets?.top ?? 0) + 16, marginBottom: 12, zIndex: 10, position: 'relative' }}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <MaterialIcons name="arrow-back" size={20} color="#1B1E36" />
           <Text style={styles.backText}>Volver</Text>

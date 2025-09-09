@@ -42,7 +42,7 @@ export default function InspectSubjectScreen() {
       style={{ flex: 1, backgroundColor: '#1B1E36' }}
       contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 12 }}
     >
-      <View style={{ alignSelf: 'stretch', marginBottom: 8 }}>
+      <View style={{ alignSelf: 'stretch', marginBottom: 8, zIndex: 10, position: 'relative' }}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backText}>Volver</Text>
         </TouchableOpacity>

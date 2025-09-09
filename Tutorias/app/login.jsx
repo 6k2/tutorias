@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { useTopAlert } from "../../components/TopAlert";
-import { auth } from "../config/firebase";
+import { useTopAlert } from "../components/TopAlert";
+import { auth } from "./config/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { MaterialIcons } from "@expo/vector-icons";
 
@@ -26,13 +26,12 @@ export default function LoginScreen() {
 
   React.useEffect(() => {
     const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, (u) => {
+    const unsub = onAuthStateChanged(require('./config/firebase').auth, (u) => {
       if (u) router.replace('/');
     });
     return () => unsub();
   }, [router]);
 
-  // Show incoming auth-required alert (e.g., redirected from Profile/Agenda)
   React.useEffect(() => {
     const dest = params?.dest || 'esta sección';
     const should = params?.alert === 'needAuth';
@@ -49,22 +48,17 @@ export default function LoginScreen() {
     try {
       setError(null);
       if (!email.trim()) {
-        console.warn("Login: validation failed -> email missing");
         setError("Ingresa un email válido");
         return;
       }
       if (!password) {
-        console.warn("Login: validation failed -> password missing");
         setError("Ingresa tu contraseña");
         return;
       }
       setLoading(true);
-      console.log("Login: signing in", { email });
       await signInWithEmailAndPassword(auth, email, password);
-      console.log("Login: success");
       router.replace("/");
     } catch (e) {
-      console.error("Login error", e);
       let msg = "No se pudo iniciar sesión";
       if (e?.code === "auth/invalid-credential") msg = "Credenciales inválidas";
       if (e?.code === "auth/user-not-found") msg = "Usuario no encontrado";
@@ -79,7 +73,6 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Login</Text>
-
 
       <TextInput
         style={styles.input}
@@ -126,7 +119,7 @@ export default function LoginScreen() {
       </TouchableOpacity>
 
       <Text style={styles.footer}>
-        Don’t have an account?{" "}
+        Don’t have an account?{' '}
         <Text style={styles.loginLink} onPress={() => router.push("/signup")}>
           Sign up here
         </Text>
@@ -135,7 +128,6 @@ export default function LoginScreen() {
   );
 }
 
-/* estilos compartidos */
 const styles = StyleSheet.create({
   container: {
     flex: 1,

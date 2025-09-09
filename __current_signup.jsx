@@ -91,7 +91,7 @@ export default function SignUpScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Sign up</Text>
 
-      <Text style={styles.subtitle}>WHO YOU ARE?</Text>
+      <Text style={styles.subtitle}>TELL US ABOUT YOU :D</Text>
 
       <View style={styles.roles}>
         <TouchableOpacity onPress={() => setRole("Student")}>

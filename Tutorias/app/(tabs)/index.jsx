@@ -12,18 +12,22 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { auth, db } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { useTopAlert } from "../../components/TopAlert";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const [isAuthed, setIsAuthed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [role, setRole] = useState("");
+  const [uid, setUid] = useState("");
+  const topAlert = useTopAlert();
 
   useEffect(() => {
     const { onAuthStateChanged } = require('firebase/auth');
     const unsub = onAuthStateChanged(require('../config/firebase').auth, async (u) => {
       setIsAuthed(!!u);
+      setUid(u?.uid || "");
       if (u) {
         try {
           const ref = doc(db, 'users', u.uid);
@@ -57,13 +61,13 @@ export default function HomeScreen() {
         key: "biologia",
         title: "Biología",
         image:
-          "https://images.unsplash.com/photo-1529101091764-c3526daf38fe?q=80&w=1600&auto=format&fit=crop",
+          "https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg",
       },
       {
         key: "algebra",
         title: "Álgebra",
         image:
-          "https://images.unsplash.com/photo-1509223197845-458d87318791?q=80&w=1600&auto=format&fit=crop",
+          "https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg",
       },
       {
         key: "ingles",
@@ -94,6 +98,7 @@ export default function HomeScreen() {
       }
     });
   };
+  const isSmall = windowHeight < 680 || windowWidth < 360;
   return (
     <View style={styles.screen}>
       <Animated.ScrollView
@@ -108,26 +113,26 @@ export default function HomeScreen() {
           end={{ x: 1, y: 1 }}
           style={styles.hero}
         >
-          <Text style={styles.heroTitle}>TUTORIAS</Text>
-          <Text style={styles.heroSubtitle}>Reserva clases, edita tu perfil y chatea</Text>
+          <Text style={[styles.heroTitle, isSmall && { fontSize: 34 }]}>TUTORIAS</Text>
+          <Text style={[styles.heroSubtitle, isSmall && { fontSize: 12 }]}>Reserva clases, edita tu perfil y chatea</Text>
           {authChecked && !isAuthed && (
-            <View style={styles.heroActions}>
+            <View style={[styles.heroActions, isSmall && { flexWrap: 'wrap' }]}>
               <TouchableOpacity
-                style={styles.heroBtn}
+                style={[styles.heroBtn, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
                 onPress={() => router.push("/login")}
               >
                 <Text style={styles.heroBtnText}>Iniciar sesión</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push("/signup")}
-                style={styles.ctaGradientBtn}
+                style={[styles.ctaGradientBtn, isSmall && { marginTop: 8 }]}
                 activeOpacity={0.9}
               >
                 <LinearGradient
                   colors={["#34D399", "#10B981"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.ctaGradientBg}
+                  style={[styles.ctaGradientBg, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
                 >
                   <Text style={styles.ctaGradientText}>Registrarme</Text>
                 </LinearGradient>
@@ -174,10 +179,27 @@ export default function HomeScreen() {
                     >
                       <Text style={styles.inspectText}>INSPECCIONAR</Text>
                     </TouchableOpacity>
-                    {(role || '').toLowerCase() === 'teacher' && (
+{(role || '').toLowerCase() === 'teacher' && (
                       <TouchableOpacity
                         style={styles.matricularBtn}
-                        onPress={() => router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`)}
+                        onPress={async () => {
+                          try {
+                            if (!uid) {
+                              topAlert.show('Debes iniciar sesión para acceder a: Matricula', 'info');
+                              return;
+                            }
+                            const id = `${uid}_${s.key}`;
+                            const snap1 = await getDoc(doc(db, 'offers', id));
+                            const snap2 = await getDoc(doc(db, 'users', uid, 'offers', s.key));
+                            if (snap1.exists() || snap2.exists()) {
+                              topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
+                              return;
+                            }
+                            router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`);
+                          } catch {
+                            router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`);
+                          }
+                        }}
                       >
                         <LinearGradient colors={["#34D399", "#10B981"]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.matricularBg}>
                           <Text style={styles.inspectText}>MATRICULAR</Text>
@@ -305,3 +327,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
 });
+

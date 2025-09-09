@@ -6,12 +6,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
-import { auth, db } from "../config/firebase";
+import { auth, db } from "./config/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
@@ -26,48 +25,40 @@ export default function SignUpScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  console.log("SignUp: screen mounted");
 
   React.useEffect(() => {
     const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, (u) => {
+    const unsub = onAuthStateChanged(require('./config/firebase').auth, (u) => {
       if (u) router.replace('/');
     });
     return () => unsub();
   }, [router]);
 
   const onSignup = async () => {
-    console.log("SignUp: onSignup clicked");
     try {
       setError(null);
       if (!role) {
-        console.warn("SignUp: validation failed -> role missing");
         setError("Selecciona un rol");
         return;
       }
       if (!username.trim()) {
-        console.warn("SignUp: validation failed -> username missing");
         setError("Ingresa un nombre de usuario");
         return;
       }
       if (!email.trim()) {
-        console.warn("SignUp: validation failed -> email missing");
         setError("Ingresa un email válido");
         return;
       }
       if (password.length < 6) {
-        console.warn("SignUp: validation failed -> weak password");
         setError("Contraseña débil (mínimo 6 caracteres)");
         return;
       }
       if (password !== confirmPassword) {
-        console.warn("SignUp: validation failed -> password mismatch");
         setError("Las contraseñas no coinciden");
         return;
       }
 
       setLoading(true);
-      console.log("SignUp: creating user", { email, role, username });
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const uid = cred.user.uid;
 
@@ -79,10 +70,8 @@ export default function SignUpScreen() {
         createdAt: serverTimestamp(),
       });
 
-      console.log("SignUp: success", { uid });
       router.replace("/");
     } catch (e) {
-      console.error("SignUp error", e);
       let msg = "No se pudo crear la cuenta";
       if (e?.code === "auth/email-already-in-use") msg = "El email ya está en uso";
       if (e?.code === "auth/invalid-email") msg = "Email inválido";
@@ -99,7 +88,7 @@ export default function SignUpScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Sign up</Text>
 
-      <Text style={styles.subtitle}>WHO YOU ARE?</Text>
+      <Text style={styles.subtitle}>TELL US ABOUT YOU :D</Text>
 
       <View style={styles.roles}>
         <TouchableOpacity onPress={() => setRole("Student")}>
@@ -128,6 +117,7 @@ export default function SignUpScreen() {
         value={username}
         onChangeText={setUsername}
       />
+
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -137,6 +127,7 @@ export default function SignUpScreen() {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, { paddingRight: 44 }]}
@@ -155,6 +146,7 @@ export default function SignUpScreen() {
           <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
         </TouchableOpacity>
       </View>
+
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, { paddingRight: 44 }]}
@@ -189,9 +181,8 @@ export default function SignUpScreen() {
         )}
       </TouchableOpacity>
 
-      {/* Footer con link a Login */}
       <Text style={styles.footer}>
-        Already have an account?{" "}
+        Already have an account?{' '}
         <Text
           style={styles.loginLink}
           onPress={() => router.push("/login")}
@@ -302,3 +293,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+

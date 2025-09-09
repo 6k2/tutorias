@@ -9,13 +9,11 @@ import { signOut } from 'firebase/auth';
 import { useRouter } from 'expo-router';
 import { useTopAlert } from '../../components/TopAlert';
 import { useAuthGuard } from '../../hooks/useAuthGuard';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, ready } = useAuthGuard({ dest: 'Perfil', delayMs: 400 });
   const topAlert = useTopAlert();
-  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [photoURL, setPhotoURL] = useState('');
   const [description, setDescription] = useState('');
@@ -121,10 +119,7 @@ export default function ProfileScreen() {
   if (!user) return null; // redirigido por el guard
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: '#1B1E36' }}
-      contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 12 }}
-    >
+    <ScrollView style={{ flex: 1, backgroundColor: '#1B1E36' }} contentContainerStyle={{ padding: 16, paddingTop: 28 }}>
       {/* Header + AGENDA */}
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Perfil</Text>
@@ -181,14 +176,7 @@ export default function ProfileScreen() {
         placeholderTextColor="#9aa3b2"
         multiline
         value={description}
-        onChangeText={(t) => {
-          const v = t || '';
-          if (v.length > 255) {
-            topAlert.show('Límite de 255 caracteres alcanzado.', 'info');
-            return;
-          }
-          setDescription(v);
-        }}
+        onChangeText={setDescription}
       />
 
       {/* Tus datos (no editable) */}
@@ -432,3 +420,4 @@ const styles = StyleSheet.create({
   },
   modalSaveText: { color: '#fff', fontWeight: '800' },
 });
+

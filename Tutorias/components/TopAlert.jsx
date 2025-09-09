@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     zIndex: 9999,
+    pointerEvents: 'none',
   },
   banner: {
     paddingHorizontal: 14,
