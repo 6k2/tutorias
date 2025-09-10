@@ -1,3 +1,4 @@
+// Matricula screen: teachers create their class offer (seats, price, image, schedule), xd
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -78,6 +79,7 @@ export default function MatriculaScreen() {
     setSelected((prev) => ({ ...prev, [k]: !prev[k] }));
   };
 
+  // Pick one image (we keep it lightweight and capped at 8MB)
   const pickImage = async () => {
     const opts = { quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images' };
     const res = await ImagePicker.launchImageLibraryAsync(opts);
@@ -98,6 +100,7 @@ export default function MatriculaScreen() {
 
   const removeImage = (idx) => setImages((arr) => arr.filter((_, i) => i !== idx));
 
+  // Validate and save the offer. We compress continuous hours into clean blocks.
   const save = async () => {
     let payload;
     try {
@@ -153,6 +156,7 @@ export default function MatriculaScreen() {
         createdAt: serverTimestamp(),
       };
 
+      // Prevent duplicate offers for the same subject and teacher
       const id = `${user.uid}_${subjectKey}`;
       const mainRef = doc(db, 'offers', id);
       const snap = await getDoc(mainRef);
