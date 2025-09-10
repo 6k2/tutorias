@@ -1,3 +1,4 @@
+// Tiny explore stub — space for future features, xd
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 

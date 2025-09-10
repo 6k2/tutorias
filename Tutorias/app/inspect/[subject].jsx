@@ -6,10 +6,12 @@ import { collection, getDocs, getDoc, doc, query, where } from 'firebase/firesto
 import { db } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
 
+// Screen entry. Uses params to fetch offers for the chosen subject.
 export default function InspectSubjectScreen() {
   const router = useRouter();
   const { subject, name } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  // Params come URL-encoded, so we clean them up here
   const subjectKey = decodeURIComponent(subject || '');
   const subjectName = decodeURIComponent(name || subjectKey);
   const [items, setItems] = useState([]);
@@ -69,6 +71,7 @@ export default function InspectSubjectScreen() {
         </View>
       )}
       {items.map((it) => {
+        // Seats math time: we calculate availability to show a friendly badge, xd
         const enrolled = Number(it.enrolledCount || 0);
         const max = Number(it.maxStudents || 0);
         const available = max === 0 ? true : enrolled < max;
