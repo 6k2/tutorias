@@ -5,6 +5,8 @@ node_modules/
 
 # Expo
 .expo/
+.expo-shared/
+.eas/
 dist/
 web-build/
 expo-env.d.ts
@@ -13,6 +15,7 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
@@ -20,20 +23,75 @@ expo-env.d.ts
 
 # Metro
 .metro-health-check*
+node_modules/.cache/
 
 # debug
-npm-debug.*
+npm-debug.log*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
+expo-debug.log*
+*.log
+
+# Lint/cache
+.eslintcache
+.cache/
 
 # macOS
 .DS_Store
 *.pem
 
 # local env files
+.env
+.env.*
 .env*.local
+.envrc
 
 # typescript
 *.tsbuildinfo
 
 app-example
+
+# Firebase
+.firebase/
+firebase-debug.log*
+.runtimeconfig.json
+
+# iOS (Expo prebuild)
+ios/
+ios/build/
+ios/DerivedData/
+ios/*.xccheckout
+ios/*.xcuserstate
+ios/*/Pods/
+ios/Pods/
+*.xcscmblueprint
+*.xcworkspace/xcuserdata
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Android (Expo prebuild)
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/local.properties
+android/**/generated/
+android/captures/
+android/.cxx/
+*.apk
+*.aab
+
+# Editors/IDEs
+.vscode/
+.idea/
+
+# Test coverage/artifacts
+coverage/
+.nyc_output/

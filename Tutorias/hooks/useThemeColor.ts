@@ -1,6 +1,6 @@
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Theme helper: gives you the right color for light/dark mode, xd
+ * Learn more: https://docs.expo.dev/guides/color-schemes/
  */
 
 import { Colors } from '@/constants/Colors';

@@ -1,3 +1,4 @@
+// 404 screen: when a route doesn’t exist, we land here, xd
 import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 
