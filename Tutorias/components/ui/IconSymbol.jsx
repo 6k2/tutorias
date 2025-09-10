@@ -1,4 +1,4 @@
-// Fallback for using MaterialIcons on Android and web.
+// Fallback for using MaterialIcons on Android and web. iOS uses SF Symbols.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
@@ -22,5 +22,19 @@ const MAPPING = {
  * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
  */
 export function IconSymbol({ name, size = 24, color, style, weight }) {
+export function IconSymbol({
+  name,
+  size = 24,
+  color,
+  style,
+}: {
+  name: IconSymbolName;
+  size?: number;
+  color: string | OpaqueColorValue;
+  style?: StyleProp<TextStyle>;
+  weight?: SymbolWeight;
+}) {
+export function IconSymbol({ name, size = 24, color, style, weight }) {
+  // We map SF Symbol-like names to Material icons here, easy-peasy xd
   return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
 }

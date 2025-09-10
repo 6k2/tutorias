@@ -1,4 +1,8 @@
 import { SymbolView } from 'expo-symbols';
+import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
+import { StyleProp, ViewStyle } from 'react-native';
+// iOS-only icon that uses SF Symbols for crisp native vibes, xd
+import { SymbolView } from 'expo-symbols';
 
 export function IconSymbol({
   name,

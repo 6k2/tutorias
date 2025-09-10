@@ -1,3 +1,7 @@
+
+// Global top-of-screen alert with a lil animation, xd
+// Wrap your app with TopAlertProvider and call useTopAlert().show(message, type)
+
 import React, { createContext, useContext, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -5,6 +9,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const TopAlertContext = createContext(null);
 
 export function TopAlertProvider({ children }) {
+
+  // Animation values and current message/type live here
+
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-20)).current;

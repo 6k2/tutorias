@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { auth } from '../app/config/firebase';
 
+// dest = name of the protected area (shown in alert), delayMs = small delay so it feels natural
 export function useAuthGuard(options = {}) {
   const { dest = 'esta sección', delayMs = 400, requireAuth = true, loginPath = '/login' } = options;
   const router = useRouter();
@@ -21,6 +22,7 @@ export function useAuthGuard(options = {}) {
     }, delayMs);
   }, [dest, delayMs, loginPath, requireAuth, router]);
 
+  // Watch auth changes and schedule redirect if needed
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
@@ -33,6 +35,7 @@ export function useAuthGuard(options = {}) {
     };
   }, [scheduleRedirect]);
 
+  // Re-check when the screen focuses again
   useFocusEffect(
     useCallback(() => {
       if (!auth.currentUser) scheduleRedirect();

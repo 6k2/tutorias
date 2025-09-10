@@ -1,4 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
+// Home screen aka vibes central xd
+// Shows hero banner, subject cards, and quick actions.
+// Teachers can go to Matricular from here to post their offer.
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   View,
@@ -43,6 +48,7 @@ export default function HomeScreen() {
     return () => unsub();
   }, []);
 
+  // Static list of subjects we show on the home feed
   const subjects = useMemo(
     () => [
       {
@@ -75,6 +81,12 @@ export default function HomeScreen() {
         image:
           "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
       },
+      {
+        key: "ciencia",
+        title: "Ciencia",
+        image:
+          "https://images.unsplash.com/photo-1559757175-570b6c9dff64?q=80&w=1600&auto=format&fit=crop",
+      },
     ],
     []
   );
@@ -83,6 +95,7 @@ export default function HomeScreen() {
   const cardYs = useRef(Array(subjects.length).fill(undefined)).current;
   const cardShown = useRef(Array(subjects.length).fill(false)).current;
 
+  // Animate cards when they enter the viewport (fade/slide in). Smooth, xd
   const onScroll = (e) => {
     const y = e.nativeEvent.contentOffset.y;
     const viewportBottom = y + windowHeight;
