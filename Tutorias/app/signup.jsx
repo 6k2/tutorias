@@ -1,4 +1,3 @@
-// Signup screen: pick your vibe (Student/Teacher), set username/email, and go, xd
 import React, { useState } from "react";
 import {
   View,
@@ -35,7 +34,6 @@ export default function SignUpScreen() {
     return () => unsub();
   }, [router]);
 
-  // Create the account and store a basic user profile in Firestore
   const onSignup = async () => {
     try {
       setError(null);
@@ -92,7 +90,6 @@ export default function SignUpScreen() {
 
       <Text style={styles.subtitle}>TELL US ABOUT YOU :D</Text>
 
-      {/* Choose your role. This decides what features you get later */}
       <View style={styles.roles}>
         <TouchableOpacity onPress={() => setRole("Student")}>
           <Image

@@ -1,4 +1,3 @@
-// Login screen: quick sign-in with email + password, clean and simple, xd
 import React, { useState } from "react";
 import {
   View,
@@ -45,7 +44,6 @@ export default function LoginScreen() {
     return () => clearTimeout(t);
   }, [params]);
 
-  // Try to log in; shows friendly error messages if anything is off
   const onLogin = async () => {
     try {
       setError(null);
@@ -86,7 +84,6 @@ export default function LoginScreen() {
         autoCapitalize="none"
       />
 
-      {/* Password field with eye icon to show/hide, because convenience ftw xd */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={[styles.input, { paddingRight: 44 }]}

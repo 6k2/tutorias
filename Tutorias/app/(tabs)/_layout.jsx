@@ -1,4 +1,3 @@
-// Tab layout: controls the bottom tabs and guards access with cute alerts xd
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { auth } from '../config/firebase';
@@ -7,7 +6,6 @@ import CustomTabBar from '../../components/CustomTabBar';
 import { IconSymbol } from '../../components/ui/IconSymbol';
 
 export default function TabLayout() {
-  // We show a custom bottom bar and block tabs that need login
   const topAlert = useTopAlert();
 
   return (

@@ -1,4 +1,3 @@
-// Chats screen placeholder — soon you’ll talk with teachers/students, xd
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 

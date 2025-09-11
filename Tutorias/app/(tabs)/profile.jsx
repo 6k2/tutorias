@@ -1,5 +1,3 @@
-// Profile screen where users show their best self, xd
-// You can change avatar, bio, pick specialties, and logout.
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  // Redirects to login if not authenticated (gentle nudge, xd)
   const { user, ready } = useAuthGuard({ dest: 'Perfil', delayMs: 400 });
   const topAlert = useTopAlert();
   const insets = useSafeAreaInsets();
@@ -73,7 +70,6 @@ export default function ProfileScreen() {
     JSON.stringify([...specialties].sort()) !== JSON.stringify([...initialData.specialties].sort())
   );
 
-  // Let the user choose a profile picture from their gallery
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -86,12 +82,10 @@ export default function ProfileScreen() {
     }
   };
 
-  // Add/remove a subject from selected specialties
   const toggleSubject = (name) => {
     setSpecialties((prev) => prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]);
   };
 
-  // Save only the editable fields (photo, description, specialties)
   const saveProfile = async () => {
     try {
       if (!user) return;
@@ -108,7 +102,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Bye! Clear session and head home
   const doLogout = async () => {
     try {
       await signOut(auth);

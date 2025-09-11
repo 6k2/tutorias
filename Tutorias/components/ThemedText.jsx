@@ -1,17 +1,6 @@
-<<<<<<< Updated upstream:Tutorias/components/ThemedText.tsx
-import { StyleSheet, Text, type TextProps } from 'react-native';
-=======
-// A text component that adapts to theme and exposes a few styles, xd
 import { StyleSheet, Text } from 'react-native';
->>>>>>> Stashed changes:Tutorias/components/ThemedText.jsx
 
-import { useThemeColor } from '@/hooks/useThemeColor';
-
-export type ThemedTextProps = TextProps & {
-  lightColor?: string;
-  darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
-};
+import { useThemeColor } from '../hooks/useThemeColor';
 
 export function ThemedText({
   style,
@@ -19,13 +8,8 @@ export function ThemedText({
   darkColor,
   type = 'default',
   ...rest
-<<<<<<< Updated upstream:Tutorias/components/ThemedText.tsx
-}: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
-=======
 }) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text'); // auto color ftw
->>>>>>> Stashed changes:Tutorias/components/ThemedText.jsx
+  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
 
   return (
     <Text

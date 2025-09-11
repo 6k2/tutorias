@@ -1,4 +1,3 @@
-// Cloud Functions: keep user profile docs in sync when a new auth user is created, xd
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 

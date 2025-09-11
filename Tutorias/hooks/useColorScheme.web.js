@@ -1,4 +1,3 @@
-// Web-only color scheme hook: waits until client hydration to avoid mismatch, xd
 import { useEffect, useState } from 'react';
 import { useColorScheme as useRNColorScheme } from 'react-native';
 

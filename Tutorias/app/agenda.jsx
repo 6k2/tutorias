@@ -1,4 +1,3 @@
-// Agenda screen placeholder — planned to show booked classes, xd
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

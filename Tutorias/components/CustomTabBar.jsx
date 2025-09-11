@@ -1,4 +1,3 @@
-// Custom bottom tab bar with a cute elevated center bubble for Home, xd
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { IconSymbol } from './ui/IconSymbol';
