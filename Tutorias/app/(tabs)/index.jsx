@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import React from "react";
 // Home screen aka vibes central xd
 // Shows hero banner, subject cards, and quick actions.
 // Teachers can go to Matricular from here to post their offer.
-import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   View,

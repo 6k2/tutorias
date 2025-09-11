@@ -1,12 +1,7 @@
 // Fallback for using MaterialIcons on Android and web. iOS uses SF Symbols.
-
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-/**
- * Add your SF Symbols to Material Icons mappings here.
- * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
- * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
- */
+// Map SF Symbol-like names to Material Icons
 const MAPPING = {
   'house.fill': 'home',
   'paperplane.fill': 'send',
@@ -16,25 +11,7 @@ const MAPPING = {
   'bubble.left.and.bubble.right.fill': 'forum',
 };
 
-/**
- * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
- * This ensures a consistent look across platforms, and optimal resource usage.
- * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
- */
 export function IconSymbol({ name, size = 24, color, style, weight }) {
-export function IconSymbol({
-  name,
-  size = 24,
-  color,
-  style,
-}: {
-  name: IconSymbolName;
-  size?: number;
-  color: string | OpaqueColorValue;
-  style?: StyleProp<TextStyle>;
-  weight?: SymbolWeight;
-}) {
-export function IconSymbol({ name, size = 24, color, style, weight }) {
-  // We map SF Symbol-like names to Material icons here, easy-peasy xd
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+  const materialName = MAPPING[name] || 'help-outline';
+  return <MaterialIcons color={color} size={size} name={materialName} style={style} />;
 }

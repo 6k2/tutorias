@@ -1,11 +1,6 @@
 // Firebase core (browser + RN). Avoid top-level analytics usage to support SSR/static.
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 // Firebase setup (works on web + native). We keep it chill and SSR-safe, xd
-// Avoid top-level analytics init so static builds don’t cry.
+// Avoid top-level analytics init so static builds don't cry.
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
