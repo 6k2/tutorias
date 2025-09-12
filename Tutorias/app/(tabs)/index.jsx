@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
 // Home screen aka vibes central xd
 // Shows hero banner, subject cards, and quick actions.
 // Teachers can go to Matricular from here to post their offer.
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import {
   View,
@@ -79,12 +79,6 @@ export default function HomeScreen() {
         image:
           "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
       },
-      {
-        key: "ciencia",
-        title: "Ciencia",
-        image:
-          "https://images.unsplash.com/photo-1559757175-570b6c9dff64?q=80&w=1600&auto=format&fit=crop",
-      },
     ],
     []
   );
@@ -95,22 +89,22 @@ export default function HomeScreen() {
 
   // Animate cards when they enter the viewport (fade/slide in). Smooth, xd
   const onScroll = (e) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const viewportBottom = y + windowHeight;
-    subjects.forEach((_, i) => {
-      const cardY = cardYs[i];
-      if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
-        cardShown[i] = true;
-        Animated.timing(cardAnims[i], {
-          toValue: 1,
-          duration: 450,
-          useNativeDriver: false,
-        }).start();
-      }
-    });
   };
+  const viewportBottom = windowHeight;
+  subjects.forEach((_, i) => {
+    const cardY = cardYs[i];
+    if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
+      cardShown[i] = true;
+      Animated.timing(cardAnims[i], {
+        toValue: 1,
+        duration: 450,
+        useNativeDriver: false,
+      }).start();
+    }
+  });
+  // Detect small screens to adjust some styles
   const isSmall = windowHeight < 680 || windowWidth < 360;
-  return (
+  return ( // Main container view with background color
     <View style={styles.screen}>
       <Animated.ScrollView
         onScroll={onScroll}
@@ -227,7 +221,7 @@ export default function HomeScreen() {
     </View>
   );
 }
-
+// Styles for the HomeScreen component
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
