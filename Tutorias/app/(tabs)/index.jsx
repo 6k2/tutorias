@@ -86,22 +86,34 @@ export default function HomeScreen() {
   const cardAnims = useRef(subjects.map(() => new Animated.Value(0))).current;
   const cardYs = useRef(Array(subjects.length).fill(undefined)).current;
   const cardShown = useRef(Array(subjects.length).fill(false)).current;
+  const scrollYRef = useRef(0);
 
-  // Animate cards when they enter the viewport (fade/slide in). Smooth, xd
-  const onScroll = (e) => {
+  const maybeAnimateVisible = () => {
+    const viewportBottom = windowHeight + scrollYRef.current;
+    subjects.forEach((_, i) => {
+      const cardY = cardYs[i];
+      if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
+        cardShown[i] = true;
+        Animated.timing(cardAnims[i], {
+          toValue: 1,
+          duration: 450,
+          useNativeDriver: false,
+        }).start();
+      }
+    });
   };
-  const viewportBottom = windowHeight;
-  subjects.forEach((_, i) => {
-    const cardY = cardYs[i];
-    if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
-      cardShown[i] = true;
-      Animated.timing(cardAnims[i], {
-        toValue: 1,
-        duration: 450,
-        useNativeDriver: false,
-      }).start();
-    }
-  });
+
+  // Animate cards when they enter the viewport (fade/slide in).
+  const onScroll = (e) => {
+    const y = e?.nativeEvent?.contentOffset?.y || 0;
+    scrollYRef.current = y;
+    maybeAnimateVisible();
+  };
+  // Run once after mount to animate above-the-fold cards
+  useEffect(() => {
+    const id = requestAnimationFrame(() => maybeAnimateVisible());
+    return () => cancelAnimationFrame(id);
+  }, [windowHeight]);
   // Detect small screens to adjust some styles
   const isSmall = windowHeight < 680 || windowWidth < 360;
   return ( // Main container view with background color
@@ -172,6 +184,7 @@ export default function HomeScreen() {
                 onLayout={(e) => {
                   const y = e.nativeEvent.layout.y;
                   cardYs[i] = y;
+                  maybeAnimateVisible();
                 }}
               >
                 <Image source={{ uri: s.image }} style={styles.cardImage} resizeMode="cover" />

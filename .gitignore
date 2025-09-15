@@ -39,3 +39,10 @@ coverage/
 __*.jsx
 __*.txt
 __*.ps1
+
+# Text files not part of source code
+# Ignore all .txt files by default
+*.txt
+
+# Allow .txt that live inside the app source tree
+!Tutorias/**/*.txt
