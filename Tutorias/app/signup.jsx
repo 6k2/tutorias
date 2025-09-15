@@ -146,6 +146,7 @@ export default function SignUpScreen() {
           value={password}
           onChangeText={setPassword}
         />
+
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}

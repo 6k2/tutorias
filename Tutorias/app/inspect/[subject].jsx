@@ -64,10 +64,10 @@ export default function InspectSubjectScreen() {
         </TouchableOpacity>
       </View>
       <Text style={styles.title}>Docentes en {subjectName}</Text>
-      {loading && <Text style={styles.note}>Cargandoâ€¦</Text>}
+      {loading && <Text style={styles.note}>Cargando</Text>}
       {empty && (
         <View style={styles.row}>
-          <Text style={styles.rowTitle}>No hay clases disponibles todavÃ­a.</Text>
+          <Text style={styles.rowTitle}>No hay clases disponibles todavia.</Text>
         </View>
       )}
       {items.map((it) => {
@@ -87,8 +87,8 @@ export default function InspectSubjectScreen() {
                   {available ? 'DISPONIBLE' : 'OCUPADO'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => topAlert.show('MÃ³dulo, prÃ³ximamente', 'info')} style={styles.moreBtn}>
-                <Text style={styles.moreText}>âžœ</Text>
+              <TouchableOpacity onPress={() => topAlert.show('Modulo, proximamente', 'info')} style={styles.moreBtn}>
+                <Text style={styles.moreText}>-></Text>
               </TouchableOpacity>
             </View>
           </View>
