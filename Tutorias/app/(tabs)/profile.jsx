@@ -1,7 +1,7 @@
 // Profile screen where users show their best self, xd
 // You can change avatar, bio, pick specialties, and logout.
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -32,14 +32,16 @@ export default function ProfileScreen() {
   const [role, setRole] = useState('');
 
   const allSubjects = useMemo(() => [
-    'Cálculo',
+    'CÃ¡lculo',
     'Software',
-    'Biología',
-    'Álgebra',
-    'Inglés',
+    'BiologÃ­a',
+    'Ãlgebra',
+    'InglÃ©s',
   ], []);
 
   const [initialData, setInitialData] = useState({ photoURL: '', description: '', specialties: [], username: '', email: '', role: '' });
+
+  const isTeacher = useMemo(() => String(role).toLowerCase() === 'teacher', [role]);
 
   // Auth guard centralizado via useAuthGuard
 
@@ -77,7 +79,7 @@ export default function ProfileScreen() {
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      topAlert.show('Permiso requerido: habilita acceso a galería', 'error');
+      topAlert.show('Permiso requerido: habilita acceso a galerÃ­a', 'error');
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
@@ -101,9 +103,9 @@ export default function ProfileScreen() {
         specialties,
       }, { merge: true });
       setInitialData({ photoURL, description: description.trim(), specialties });
-      topAlert.show('CAMBIOS GUARDADOS 🙂', 'success');
-    } catch (e) {
-      console.error('Profile: save failed', e);
+      topAlert.show('CAMBIOS GUARDADOS ðŸ™‚', 'success');
+    } catch (_error) {
+      console.error('Profile: save failed', _error);
       topAlert.show('No se pudieron guardar los cambios', 'error');
     }
   };
@@ -113,8 +115,8 @@ export default function ProfileScreen() {
     try {
       await signOut(auth);
       router.replace('/');
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo cerrar sesión');
+    } catch (_error) {
+      topAlert.show('No se pudo cerrar sesion', 'error');
     }
   };
 
@@ -135,12 +137,19 @@ export default function ProfileScreen() {
       {/* Header + AGENDA */}
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Perfil</Text>
-        <TouchableOpacity onPress={() => { try { /* screen pending */ } finally { router.push('/agenda'); } }} activeOpacity={0.9}>
-          <LinearGradient colors={["#FFA500", "#FF6A00"]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.agendaBtn}>
-            <MaterialIcons name="add" size={20} color="#1B1E36" />
-            <Text style={styles.agendaText}>AGENDA</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => { try { /* screen pending */ } finally { router.push('/agenda'); } }} activeOpacity={0.9}>
+            <LinearGradient colors={["#FFA500", "#FF6A00"]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.agendaBtn}>
+              <MaterialIcons name="add" size={20} color="#1B1E36" />
+              <Text style={styles.agendaText}>AGENDA</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          {isTeacher && (
+            <TouchableOpacity style={styles.pendingBtn} onPress={() => router.push('/agenda?tab=pendientes')} activeOpacity={0.9}>
+              <Text style={styles.pendingBtnText}>PENDING</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Avatar */}
@@ -180,8 +189,8 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Descripción */}
-      <Text style={styles.label}>Descripción</Text>
+      {/* DescripciÃ³n */}
+      <Text style={styles.label}>DescripciÃ³n</Text>
       <TextInput
         style={styles.inputArea}
         placeholder="Cuenta algo sobre ti"
@@ -191,7 +200,7 @@ export default function ProfileScreen() {
         onChangeText={(t) => {
           const v = t || '';
           if (v.length > 255) {
-            topAlert.show('Límite de 255 caracteres alcanzado.', 'info');
+            topAlert.show('LÃ­mite de 255 caracteres alcanzado.', 'info');
             return;
           }
           setDescription(v);
@@ -247,7 +256,7 @@ export default function ProfileScreen() {
       )}
 
       <TouchableOpacity style={styles.logoutBtn} onPress={doLogout}>
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
+        <Text style={styles.logoutText}>Cerrar sesiÃ³n</Text>
       </TouchableOpacity>
 
       {/* Modal selector */}
@@ -274,7 +283,7 @@ export default function ProfileScreen() {
                 <Text style={styles.modalCloseText}>Cerrar</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setPickerOpen(false)} style={styles.modalSaveBtn}>
-                <Text style={styles.modalSaveText}>Guardar selección</Text>
+                <Text style={styles.modalSaveText}>Guardar selecciÃ³n</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -297,6 +306,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pendingBtn: {
+    marginLeft: 8,
+    backgroundColor: '#2C2F48',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingBtnText: {
+    color: '#FFD580',
+    fontWeight: '700',
   },
   headerTitle: {
     color: '#fff',
@@ -439,3 +466,11 @@ const styles = StyleSheet.create({
   },
   modalSaveText: { color: '#fff', fontWeight: '800' },
 });
+
+
+
+
+
+
+
+

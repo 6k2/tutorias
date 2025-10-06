@@ -29,7 +29,7 @@ export default function MatriculaScreen() {
   const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
   const hours = useMemo(() => [6,8,10,12,14,16,18,20], []);
-  const days = useMemo(() => ['Lun','Mar','Mié','Jue','Vie','Sáb'], []);
+  const days = useMemo(() => ['Lun','Mar','MiÃ©','Jue','Vie','SÃ¡b'], []);
   const [selected, setSelected] = useState({}); // key: `${d}-${h}`
 
   // Load role
@@ -59,7 +59,7 @@ export default function MatriculaScreen() {
         const snap2 = await getDoc(doc(db, 'users', user.uid, 'offers', subjectKey));
         if (snap1.exists() || snap2.exists()) {
           setHasExisting(true);
-          topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
+          topAlert.show('Ya tienes una tutorÃ­a creada para esta materia', 'info');
           setTimeout(() => router.back(), 900);
         }
       } catch {}
@@ -69,7 +69,7 @@ export default function MatriculaScreen() {
   // Kick non-teachers
   useEffect(() => {
     if (ready && user && roleLoaded && !isTeacher) {
-      topAlert.show('Solo docentes pueden matricular tutorías', 'error');
+      topAlert.show('Solo docentes pueden matricular tutorÃ­as', 'error');
       router.replace('/');
     }
   }, [ready, user, roleLoaded, isTeacher]);
@@ -94,7 +94,7 @@ export default function MatriculaScreen() {
       }
     } catch {}
     if (size && size > MAX_BYTES) {
-      topAlert.show('Imagen demasiado grande (máx 8MB)', 'error');
+      topAlert.show('Imagen demasiado grande (mÃ¡x 8MB)', 'error');
       return;
     }
     setImages((arr) => (arr.length >= MAX_IMAGES ? [asset.uri] : [...arr, asset.uri]));
@@ -131,7 +131,7 @@ export default function MatriculaScreen() {
       const maxVal = Math.max(0, parseInt(maxStudents || '0', 10));
       const priceVal = Math.max(0, parseFloat(price || '0'));
       if (blocks.length === 0) { topAlert.show('Selecciona al menos un horario (2h)', 'error'); return; }
-      if (!maxVal || maxVal < 1) { topAlert.show('Define el máximo de alumnos (mín 1)', 'error'); return; }
+      if (!maxVal || maxVal < 1) { topAlert.show('Define el mÃ¡ximo de alumnos (mÃ­n 1)', 'error'); return; }
       if (priceVal < 0) { topAlert.show('El precio no puede ser negativo', 'error'); return; }
 
       // Prefer username from profile; fallback to displayName or email local-part
@@ -156,6 +156,7 @@ export default function MatriculaScreen() {
         images: Array.isArray(images) ? images : [],
         schedule: blocks,
         enrolledCount: 0,
+        pendingCount: 0,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       };
@@ -166,13 +167,13 @@ export default function MatriculaScreen() {
       const id = `${user.uid}_${subjectKey}`;
       const mainRef = doc(db, 'offers', id);
       const snap = await getDoc(mainRef);
-      if (snap.exists()) { topAlert.show('Ya tienes una tutoría creada para esta materia', 'error'); return; }
+      if (snap.exists()) { topAlert.show('Ya tienes una tutorÃ­a creada para esta materia', 'error'); return; }
       await setDoc(mainRef, payload, { merge: false });
       topAlert.show('Oferta guardada', 'success');
       router.back();
     } catch (e) {
       try { if (e && e.message) topAlert.show(`Error: ${e.message}`, 'error'); } catch {}
-      // fallback if rules solo permiten subcolección del usuario
+      // fallback if rules solo permiten subcolecciÃ³n del usuario
       try {
         const id2 = `${subjectKey}`;
         await setDoc(doc(db, 'users', user.uid, 'offers', id2), payload, { merge: false });
@@ -196,7 +197,7 @@ export default function MatriculaScreen() {
 
       <Text style={styles.title}>Matricular: {subjectName}</Text>
 
-      <Text style={styles.label}>Máximo de alumnos</Text>
+      <Text style={styles.label}>MÃ¡ximo de alumnos</Text>
       <TextInput style={styles.input} keyboardType="numeric" value={maxStudents} onChangeText={(t)=>setMaxStudents(t.replace(/[^0-9]/g,''))} placeholder="Ej: 10" placeholderTextColor="#9aa3b2" />
 
       <Text style={styles.label}>Precio (USD)</Text>

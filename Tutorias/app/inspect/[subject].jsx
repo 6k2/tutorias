@@ -1,34 +1,37 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, getDocs, getDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
+import { useAuthGuard } from '../../hooks/useAuthGuard';
+import { OFFERS_COLLECTION } from '../../constants/firestore';
 
 // Screen entry. Uses params to fetch offers for the chosen subject.
 export default function InspectSubjectScreen() {
   const router = useRouter();
   const { subject, name } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  // Params come URL-encoded, so we clean them up here
   const subjectKey = decodeURIComponent(subject || '');
   const subjectName = decodeURIComponent(name || subjectKey);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [usernames, setUsernames] = useState({});
+  const [rowLoading, setRowLoading] = useState({});
   const topAlert = useTopAlert();
+  const { user, ready } = useAuthGuard({ dest: 'Reservas', delayMs: 400 });
 
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
-        const q = query(collection(db, 'offers'), where('subject', '==', subjectKey));
+        const q = query(collection(db, OFFERS_COLLECTION), where('subject', '==', subjectKey));
         const snap = await getDocs(q);
         const rows = [];
-        snap.forEach((doc) => rows.push({ id: doc.id, ...doc.data() }));
+        snap.forEach((document) => rows.push({ id: document.id, ...document.data() }));
         if (mounted) setItems(rows);
-        // fetch display usernames for each uid (override stored username if profile has one)
-        const uids = Array.from(new Set(rows.map(r => r.uid).filter(Boolean)));
+        const uids = Array.from(new Set(rows.map((r) => r.uid).filter(Boolean)));
         const names = {};
         await Promise.all(
           uids.map(async (uid) => {
@@ -36,22 +39,49 @@ export default function InspectSubjectScreen() {
               const us = await getDoc(doc(db, 'users', uid));
               const d = us.data() || {};
               if (typeof d.username === 'string' && d.username.trim()) names[uid] = d.username.trim();
-            } catch {}
+            } catch (error) {
+              console.error('inspect: username lookup failed', error);
+            }
           })
         );
         if (mounted) setUsernames(names);
-      } catch (e) {
+      } catch (error) {
+        console.error('inspect: load failed', error);
         if (mounted) setItems([]);
       } finally {
         if (mounted) setLoading(false);
       }
     }
     if (subjectKey) load(); else setLoading(false);
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [subjectKey]);
 
-  const [usernames, setUsernames] = useState({});
   const empty = !loading && items.length === 0;
+
+  const handleInspect = async (offer) => {
+    setRowLoading((prev) => ({ ...prev, [offer.id]: true }));
+    try {
+      if (!ready || !user) {
+        topAlert.show('Debes iniciar sesion para reservar una tutoria', 'info');
+        return;
+      }
+      const max = Number(offer.maxStudents || 0);
+      const enrolled = Number(offer.enrolledCount || 0);
+      const available = max === 0 ? true : enrolled < max;
+      if (!available) {
+        topAlert.show('No hay cupos disponibles', 'info');
+        return;
+      }
+      router.push({
+        pathname: '/inspect/[subject]/[offerId]',
+        params: { subject: subjectKey, offerId: offer.id, name: subjectName },
+      });
+    } finally {
+      setRowLoading((prev) => ({ ...prev, [offer.id]: false }));
+    }
+  };
 
   return (
     <ScrollView
@@ -71,15 +101,17 @@ export default function InspectSubjectScreen() {
         </View>
       )}
       {items.map((it) => {
-        // Seats math time: we calculate availability to show a friendly badge, xd
         const enrolled = Number(it.enrolledCount || 0);
         const max = Number(it.maxStudents || 0);
         const available = max === 0 ? true : enrolled < max;
+        const isRowLoading = !!rowLoading[it.id];
         return (
           <View key={it.id} style={styles.row}>
             <View>
               <Text style={styles.rowTitle}>{usernames[it.uid] || it.username || 'Docente'}</Text>
-              <Text style={styles.rowSub}>Cupos: {enrolled}/{max || '∞'}</Text>
+              <Text style={styles.rowSub}>
+                Cupos: {max === 0 ? 'Sin limite' : `${enrolled}/${max}`}
+              </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={[styles.badge, available ? styles.badgeOk : styles.badgeBusy]}>
@@ -87,8 +119,16 @@ export default function InspectSubjectScreen() {
                   {available ? 'DISPONIBLE' : 'OCUPADO'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => topAlert.show('Modulo, proximamente', 'info')} style={styles.moreBtn}>
-                <Text style={styles.moreText}>-></Text>
+              <TouchableOpacity
+                onPress={() => handleInspect(it)}
+                style={[styles.moreBtn, isRowLoading && styles.moreBtnDisabled]}
+                disabled={isRowLoading}
+              >
+                {isRowLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.moreText}>-&gt;</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -119,7 +159,7 @@ const styles = StyleSheet.create({
   badgeBusy: { backgroundColor: '#FEE2E2' },
   badgeOkText: { color: '#065F46', fontWeight: '800' },
   badgeBusyText: { color: '#991B1B', fontWeight: '800' },
-  moreBtn: { backgroundColor: '#FF8E53', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
+  moreBtn: { backgroundColor: '#FF8E53', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', minWidth: 36 },
+  moreBtnDisabled: { opacity: 0.6 },
   moreText: { color: '#fff', fontWeight: '900' },
 });
-
