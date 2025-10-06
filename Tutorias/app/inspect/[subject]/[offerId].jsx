@@ -16,17 +16,16 @@ const dayLabels = {
   Fri: 'Fri',
   Sat: 'Sat',
   Sun: 'Sun',
-  Lun: 'Mon',
-  Mar: 'Tue',
-  Mie: 'Wed',
-  Miac: 'Wed',
-  Miac_: 'Wed',
-  'MiAc': 'Wed',
-  Jue: 'Thu',
-  Vie: 'Fri',
-  Sab: 'Sat',
-  'SA?b': 'Sat',
-  Dom: 'Sun',
+  Lun: 'Lun',
+  Mar: 'Mar',
+  Mie: 'Mié',
+  Miac: 'Mié',
+  'MiAc': 'Mié',
+  Jue: 'Jue',
+  Vie: 'Vie',
+  Sab: 'Sáb',
+  'SA?b': 'Sáb',
+  Dom: 'Dom',
 };
 
 const hoursToLabel = (value) => {
@@ -122,7 +121,7 @@ export default function OfferDetailScreen() {
 
   useEffect(() => {
     if (ready && !user) {
-      topAlert.show('Debes iniciar sesion para ver esta oferta', 'info');
+      topAlert.show('Debes iniciar sesión para ver esta oferta', 'info');
     }
   }, [ready, user, topAlert]);
 
@@ -134,10 +133,10 @@ export default function OfferDetailScreen() {
   }, [offer]);
 
   const formatSlot = (slot) => {
-    if (!slot) return '';
-    const dayLabel = dayLabels[slot.day] || slot.day;
-    return `${dayLabel} · ${hoursToLabel(slot.hourStart)} - ${hoursToLabel(slot.hourEnd)}`;
-  };
+  if (!slot) return 'Horario por definir';
+  const dayLabel = dayLabels[slot.day] || slot.day;
+  return `${dayLabel} · ${hoursToLabel(slot.hourStart)} - ${hoursToLabel(slot.hourEnd)}`;
+};
 
   const canBook = !loading && !submitting && !!selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer;
 
@@ -147,11 +146,11 @@ export default function OfferDetailScreen() {
       return;
     }
     if (!user) {
-      topAlert.show('Debes iniciar sesion para reservar', 'info');
+      topAlert.show('Debes iniciar sesión para reservar', 'info');
       return;
     }
     if (isOwnOffer) {
-      topAlert.show('No puedes reservar tu propia tutoria', 'info');
+      topAlert.show('No puedes reservar tu propia tutoría', 'info');
       return;
     }
     if (hasPending) {
@@ -205,7 +204,7 @@ export default function OfferDetailScreen() {
       await addDoc(collection(db, RESERVATIONS_COLLECTION), reservationData);
 
       setOffer((prev) => (prev ? { ...prev, pendingCount: Number(prev.pendingCount || 0) + 1 } : prev));
-      topAlert.show('Request sent. Await teacher confirmation.', 'success');
+      topAlert.show('Solicitud enviada. Espera la confirmación del docente.', 'success');
       router.push('/agenda');
     } catch (error) {
       if (offerSnapshot && error?.message !== 'No hay cupos disponibles') {
@@ -246,7 +245,7 @@ export default function OfferDetailScreen() {
   if (!offer) {
     return (
       <View style={[styles.center, { paddingTop: (insets?.top ?? 0) + 40 }]}>
-        <Text style={styles.loadingText}>No encontramos esta tutoria.</Text>
+        <Text style={styles.loadingText}>No encontramos esta tutoría.</Text>
       </View>
     );
   }
@@ -320,7 +319,7 @@ export default function OfferDetailScreen() {
 
       {hasPending && (
         <View style={styles.alertBox}>
-          <Text style={styles.alertText}>Ya tienes una solicitud pendiente para esta tutoria.</Text>
+          <Text style={styles.alertText}>Ya tienes una solicitud pendiente para esta tutoría.</Text>
         </View>
       )}
       {hasConfirmed && (
@@ -330,7 +329,7 @@ export default function OfferDetailScreen() {
       )}
       {isOwnOffer && (
         <View style={styles.alertBox}>
-          <Text style={styles.alertText}>No puedes reservar una tutoria que tu mismo publicaste.</Text>
+          <Text style={styles.alertText}>No puedes reservar una tutoría que tú mismo publicaste.</Text>
         </View>
       )}
 
@@ -383,11 +382,11 @@ const styles = StyleSheet.create({
   price: { color: '#FF8E53', fontWeight: '800', fontSize: 20, marginTop: 10 },
   metaRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 8,
   },
   metaLabel: { color: '#C7C9D9' },
-  metaValue: { color: '#fff', fontWeight: '700' },
+  metaValue: { color: '#fff', fontWeight: '700', marginLeft: 8 },
   section: { marginTop: 20 },
   sectionTitle: { color: '#fff', fontWeight: '800', marginBottom: 8 },
   sectionText: { color: '#C7C9D9', lineHeight: 20 },

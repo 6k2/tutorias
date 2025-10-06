@@ -3,16 +3,22 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { db } from '../config/firebase';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { useAuthGuard } from '../../hooks/useAuthGuard';
 import { useTopAlert } from '../../components/TopAlert';
+import { useConnectivity } from '../../tools/offline';
+
+const offlinePlaceholder = require('../../assets/offline/subject-placeholder.png');
+const draftKeyFor = (uid, subject) => `offline:matricula:${uid}:${subject}`;
 
 export default function MatriculaScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topAlert = useTopAlert();
+  const connectivity = useConnectivity();
   const { subject, name } = useLocalSearchParams();
   const subjectKey = decodeURIComponent(subject || '');
   const subjectName = decodeURIComponent(name || subjectKey);
@@ -25,17 +31,24 @@ export default function MatriculaScreen() {
   const [maxStudents, setMaxStudents] = useState('');
   const [price, setPrice] = useState('');
   const [images, setImages] = useState([]);
+  const [pendingCountDraft, setPendingCountDraft] = useState(0);
+  const [selected, setSelected] = useState({}); // key: `${d}-${h}`
   const MAX_IMAGES = 1;
   const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
-  const hours = useMemo(() => [6,8,10,12,14,16,18,20], []);
-  const days = useMemo(() => ['Lun','Mar','MiÃƒÂ©','Jue','Vie','SÃƒÂ¡b'], []);
-  const [selected, setSelected] = useState({}); // key: `${d}-${h}`
+  const hours = useMemo(() => [6, 8, 10, 12, 14, 16, 18, 20], []);
+  const days = useMemo(() => ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], []);
+
+  const draftKey = user?.uid ? draftKeyFor(user.uid, subjectKey) : null;
 
   // Load role
   useEffect(() => {
     (async () => {
-      if (!user) { setRole(''); setRoleLoaded(false); return; }
+      if (!user) {
+        setRole('');
+        setRoleLoaded(false);
+        return;
+      }
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
         setRole((snap.data() || {}).role || '');
@@ -49,6 +62,44 @@ export default function MatriculaScreen() {
 
   const isTeacher = (role || '').toLowerCase() === 'teacher';
 
+  // Restore local draft so docentes keep their disponibilidad when offline
+  useEffect(() => {
+    if (!draftKey) return;
+    let alive = true;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        if (!raw || !alive) return;
+        const draft = JSON.parse(raw);
+        if (typeof draft.maxStudents === 'string') setMaxStudents(draft.maxStudents);
+        if (typeof draft.price === 'string') setPrice(draft.price);
+        if (Array.isArray(draft.images)) setImages(draft.images);
+        if (draft.selected && typeof draft.selected === 'object') setSelected(draft.selected);
+        if (typeof draft.pendingCount === 'number') setPendingCountDraft(draft.pendingCount);
+      } catch (error) {
+        console.warn('matricula: failed to load draft', error);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [draftKey]);
+
+  // Persist draft on every change (solo pequeños objetos, así queda listo para reanudar sin internet)
+  useEffect(() => {
+    if (!draftKey) return;
+    const payload = {
+      maxStudents,
+      price,
+      images,
+      selected,
+      pendingCount: pendingCountDraft,
+    };
+    AsyncStorage.setItem(draftKey, JSON.stringify(payload)).catch((error) => {
+      console.warn('matricula: failed to persist draft', error);
+    });
+  }, [draftKey, maxStudents, price, images, selected, pendingCountDraft]);
+
   // Early duplicate-offer check
   useEffect(() => {
     (async () => {
@@ -59,29 +110,29 @@ export default function MatriculaScreen() {
         const snap2 = await getDoc(doc(db, 'users', user.uid, 'offers', subjectKey));
         if (snap1.exists() || snap2.exists()) {
           setHasExisting(true);
-          topAlert.show('Ya tienes una tutorÃƒÂ­a creada para esta materia', 'info');
+          topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
           setTimeout(() => router.back(), 900);
         }
-      } catch {}
+      } catch (error) {
+        console.warn('matricula: duplicate check failed', error);
+      }
     })();
-  }, [ready, user, isTeacher, subjectKey]);
+  }, [ready, user, isTeacher, subjectKey, topAlert, router]);
 
   // Kick non-teachers
   useEffect(() => {
     if (ready && user && roleLoaded && !isTeacher) {
-      topAlert.show('Solo docentes pueden matricular tutorÃƒÂ­as', 'error');
+      topAlert.show('Solo docentes pueden matricular tutorías', 'error');
       router.replace('/');
     }
-  }, [ready, user, roleLoaded, isTeacher]);
+  }, [ready, user, roleLoaded, isTeacher, topAlert, router]);
 
   const toggle = (d, h) => {
     const k = `${d}-${h}`;
     setSelected((prev) => ({ ...prev, [k]: !prev[k] }));
   };
 
-
   // Pick one image (we keep it lightweight and capped at 8MB)
-
   const pickImage = async () => {
     const opts = { quality: 0.7, mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images' };
     const res = await ImagePicker.launchImageLibraryAsync(opts);
@@ -90,11 +141,13 @@ export default function MatriculaScreen() {
     let size = asset.fileSize || asset.size;
     try {
       if (!size && typeof fetch === 'function') {
-        const r = await fetch(asset.uri); const b = await r.blob(); size = b.size;
+        const r = await fetch(asset.uri);
+        const b = await r.blob();
+        size = b.size;
       }
     } catch {}
     if (size && size > MAX_BYTES) {
-      topAlert.show('Imagen demasiado grande (mÃƒÂ¡x 8MB)', 'error');
+      topAlert.show('Imagen demasiado grande (máx 8MB)', 'error');
       return;
     }
     setImages((arr) => (arr.length >= MAX_IMAGES ? [asset.uri] : [...arr, asset.uri]));
@@ -102,9 +155,7 @@ export default function MatriculaScreen() {
 
   const removeImage = (idx) => setImages((arr) => arr.filter((_, i) => i !== idx));
 
-
   // Validate and save the offer. We compress continuous hours into clean blocks.
-
   const save = async () => {
     let payload;
     try {
@@ -128,24 +179,15 @@ export default function MatriculaScreen() {
         }
       });
 
-      const maxVal = Math.max(0, parseInt(maxStudents || '0', 10));
-      const priceVal = Math.max(0, parseFloat(price || '0'));
-      if (blocks.length === 0) { topAlert.show('Selecciona al menos un horario (2h)', 'error'); return; }
-      if (!maxVal || maxVal < 1) { topAlert.show('Define el mÃƒÂ¡ximo de alumnos (mÃƒÂ­n 1)', 'error'); return; }
-      if (priceVal < 0) { topAlert.show('El precio no puede ser negativo', 'error'); return; }
+      const maxVal = parseInt(maxStudents || '0', 10) || 0;
+      const priceVal = parseFloat(price || '0') || 0;
+      const usernameSafe = (() => {
+        if (!user) return 'Docente';
+        const nameMaybe = user.displayName || '';
+        if (nameMaybe.trim()) return nameMaybe.trim();
+        return (user.email || 'Docente').split('@')[0];
+      })();
 
-      // Prefer username from profile; fallback to displayName or email local-part
-      let usernameSafe = user.displayName || '';
-      try {
-        const uSnap = await getDoc(doc(db, 'users', user.uid));
-        const d = uSnap.data() || {};
-        if (typeof d.username === 'string' && d.username.trim()) {
-          usernameSafe = d.username.trim();
-        }
-      } catch {}
-      if (!usernameSafe) {
-        usernameSafe = user.email ? String(user.email).split('@')[0] : 'Docente';
-      }
       payload = {
         uid: user.uid,
         username: usernameSafe,
@@ -161,25 +203,30 @@ export default function MatriculaScreen() {
         createdAt: serverTimestamp(),
       };
 
-
       // Prevent duplicate offers for the same subject and teacher
-
       const id = `${user.uid}_${subjectKey}`;
       const mainRef = doc(db, 'offers', id);
       const snap = await getDoc(mainRef);
-      if (snap.exists()) { topAlert.show('Ya tienes una tutorÃƒÂ­a creada para esta materia', 'error'); return; }
+      if (snap.exists()) {
+        topAlert.show('Ya tienes una tutoría creada para esta materia', 'error');
+        return;
+      }
       await setDoc(mainRef, payload, { merge: false });
+      if (draftKey) await AsyncStorage.removeItem(draftKey);
       topAlert.show('Oferta guardada', 'success');
       router.back();
     } catch (e) {
-      try { if (e && e.message) topAlert.show(`Error: ${e.message}`, 'error'); } catch {}
-      // fallback if rules solo permiten subcolecciÃƒÂ³n del usuario
+      try {
+        if (e && e.message) topAlert.show(`Error: ${e.message}`, 'error');
+      } catch {}
+      // fallback if rules solo permiten subcolección del usuario
       try {
         const id2 = `${subjectKey}`;
         await setDoc(doc(db, 'users', user.uid, 'offers', id2), payload, { merge: false });
+        if (draftKey) await AsyncStorage.removeItem(draftKey);
         topAlert.show('Oferta guardada', 'success');
         router.back();
-      } catch (e2) {
+      } catch (_errorPersist) {
         topAlert.show('No se pudo guardar la oferta', 'error');
       }
     }
@@ -188,7 +235,10 @@ export default function MatriculaScreen() {
   if (!ready || !user || hasExisting || (roleLoaded && !isTeacher)) return null;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#1B1E36' }} contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 16 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: '#1B1E36' }}
+      contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 16 }}
+    >
       <View style={{ alignSelf: 'stretch', marginBottom: 8, zIndex: 10 }}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backText}>Volver</Text>
@@ -197,36 +247,75 @@ export default function MatriculaScreen() {
 
       <Text style={styles.title}>Matricular: {subjectName}</Text>
 
-      <Text style={styles.label}>MÃƒÂ¡ximo de alumnos</Text>
-      <TextInput style={styles.input} keyboardType="numeric" value={maxStudents} onChangeText={(t)=>setMaxStudents(t.replace(/[^0-9]/g,''))} placeholder="Ej: 10" placeholderTextColor="#9aa3b2" />
+      {connectivity.isOffline && (
+        <Text style={styles.offlineHint}>
+          Sin conexión: guardamos un borrador local (incluye horarios y pendientes) para reanudar luego.
+        </Text>
+      )}
+
+      <Text style={styles.label}>Máximo de alumnos</Text>
+      <TextInput
+        style={styles.input}
+        keyboardType="numeric"
+        value={maxStudents}
+        onChangeText={(t) => setMaxStudents(t.replace(/[^0-9]/g, ''))}
+        placeholder="Ej: 10"
+        placeholderTextColor="#9aa3b2"
+      />
 
       <Text style={styles.label}>Precio (USD)</Text>
-      <TextInput style={styles.input} keyboardType="numeric" value={price} onChangeText={(t)=>setPrice(t.replace(/[^0-9.]/g,''))} placeholder="Ej: 25" placeholderTextColor="#9aa3b2" />
+      <TextInput
+        style={styles.input}
+        keyboardType="numeric"
+        value={price}
+        onChangeText={(t) => setPrice(t.replace(/[^0-9.]/g, ''))}
+        placeholder="Ej: 25"
+        placeholderTextColor="#9aa3b2"
+      />
 
       <Text style={styles.label}>Imagen (1)</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         {images.map((uri, idx) => (
-          <TouchableOpacity key={uri} onPress={() => removeImage(idx)}>
-            <Image source={{ uri }} style={styles.preview} />
+          <TouchableOpacity key={`${uri}-${idx}`} onPress={() => removeImage(idx)}>
+            <Image
+              source={connectivity.isOffline ? offlinePlaceholder : { uri }}
+              style={styles.preview}
+            />
           </TouchableOpacity>
         ))}
+        {images.length === 0 && connectivity.isOffline && (
+          <Image source={offlinePlaceholder} style={styles.preview} />
+        )}
         <TouchableOpacity style={styles.addImg} onPress={pickImage}>
-          <Text style={{ color: '#fff', fontWeight: '800' }}>{images.length === 0 ? '+ Agregar' : 'Reemplazar'}</Text>
+          <Text style={{ color: '#fff', fontWeight: '800' }}>
+            {images.length === 0 ? '+ Agregar' : 'Reemplazar'}
+          </Text>
         </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>Horarios (bloques de 2h)</Text>
       <View style={styles.grid}>
         <View style={styles.headerRow}>
-          {days.map((d) => (<Text key={d} style={styles.dayHead}>{d}</Text>))}
+          {days.map((d) => (
+            <Text key={d} style={styles.dayHead}>
+              {d}
+            </Text>
+          ))}
         </View>
         {hours.map((h) => (
           <View key={h} style={styles.gridRow}>
             {days.map((d, di) => {
-              const k = `${di}-${h}`; const sel = !!selected[k];
+              const k = `${di}-${h}`;
+              const sel = !!selected[k];
               return (
-                <TouchableOpacity key={k} onPress={() => toggle(di, h)} style={[styles.cell, sel && styles.cellSel]}>
-                  <Text style={sel ? styles.cellSelText : styles.cellText}>{h}:00 - {h+2}:00</Text>
+                <TouchableOpacity
+                  key={k}
+                  onPress={() => toggle(di, h)}
+                  style={[styles.cell, sel && styles.cellSel]}
+                >
+                  <Text style={sel ? styles.cellSelText : styles.cellText}>
+                    {h}:00 - {h + 2}:00
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -245,7 +334,7 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 12 },
   label: { color: '#C7C9D9', marginTop: 10, marginBottom: 6 },
   input: { backgroundColor: '#2C2F48', color: '#fff', borderRadius: 12, padding: 12 },
-  addImg: { backgroundColor: '#2C2F48', padding: 12, borderRadius: 10 },
+  addImg: { backgroundColor: '#2C2F48', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   preview: { width: 72, height: 72, borderRadius: 10, backgroundColor: '#2C2F48' },
   grid: { marginTop: 10 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
@@ -259,5 +348,6 @@ const styles = StyleSheet.create({
   saveText: { color: '#fff', fontWeight: '800' },
   backBtn: { alignSelf: 'flex-start', backgroundColor: '#FFD580', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   backText: { color: '#1B1E36', fontWeight: '800' },
+  offlineHint: { color: '#fcd34d', marginBottom: 12 },
 });
 
