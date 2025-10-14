@@ -5,7 +5,13 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+  memoryLocalCache,
+} from "firebase/firestore";
 
 // Firebase project keys. Normally keep these in env for bigger apps.
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -32,12 +38,40 @@ if (Platform.OS === "web") {
     _auth = initializeAuth(app, {
       persistence: getReactNativePersistence(AsyncStorage),
     });
-  } catch (e) {
+  } catch (_error) {
     _auth = getAuth(app);
   }
 }
 export const auth = _auth;
-export const db = getFirestore(app);
+
+// Firestore gets persistent local cache on native so reads/writes survive offline sessions.
+// On unsupported devices we warn and downgrade to an in-memory cache so the app still works.
+let _db;
+if (Platform.OS === "web") {
+  _db = getFirestore(app);
+} else {
+  try {
+    _db = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager(),
+      }),
+    });
+  } catch (error) {
+    console.warn(
+      "Firestore persistence unavailable, falling back to memory cache",
+      error
+    );
+    try {
+      _db = initializeFirestore(app, {
+        localCache: memoryLocalCache(),
+      });
+    } catch (_fallbackError) {
+      // If Firestore was already initialised (Fast Refresh), grab the existing instance.
+      _db = getFirestore(app);
+    }
+  }
+}
+export const db = _db;
 
 // Lazily initialize Analytics only in the browser to avoid "window is not defined" during SSR/static
 // Lazily initialize Analytics in the browser only (no window? then we bounce)
@@ -48,10 +82,11 @@ export const initAnalytics = async () => {
     if (await isSupported()) {
       return getAnalytics(app);
     }
-  } catch (e) {
+  } catch (_error) {
     // noop: analytics not available in this environment
   }
   return null;
 };
 
 export default app;
+

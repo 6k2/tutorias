@@ -1,7 +1,7 @@
 // Profile screen where users show their best self, xd
 // You can change avatar, bio, pick specialties, and logout.
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -40,7 +40,6 @@ export default function ProfileScreen() {
   ], []);
 
   const [initialData, setInitialData] = useState({ photoURL: '', description: '', specialties: [], username: '', email: '', role: '' });
-
   // Auth guard centralizado via useAuthGuard
 
   useEffect(() => {
@@ -101,9 +100,9 @@ export default function ProfileScreen() {
         specialties,
       }, { merge: true });
       setInitialData({ photoURL, description: description.trim(), specialties });
-      topAlert.show('CAMBIOS GUARDADOS 🙂', 'success');
-    } catch (e) {
-      console.error('Profile: save failed', e);
+      topAlert.show('Cambios guardados :)', 'success');
+    } catch (_error) {
+      console.error('Profile: save failed', _error);
       topAlert.show('No se pudieron guardar los cambios', 'error');
     }
   };
@@ -113,12 +112,12 @@ export default function ProfileScreen() {
     try {
       await signOut(auth);
       router.replace('/');
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo cerrar sesión');
+    } catch (_error) {
+      topAlert.show('No se pudo cerrar sesión', 'error');
     }
   };
 
-  if (!ready) {
+  if (!ready || loading) {
     return (
       <View style={styles.centered}>
         <Text style={styles.info}>Cargando perfil...</Text>
@@ -439,3 +438,11 @@ const styles = StyleSheet.create({
   },
   modalSaveText: { color: '#fff', fontWeight: '800' },
 });
+
+
+
+
+
+
+
+

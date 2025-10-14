@@ -10,6 +10,12 @@ App sencilla para reservar clases y gestionar perfil. Tiene inicio con materias,
 - Matricular (solo docentes)
 - Alertas superiores y tab bar custom
 
+## Offline Mode
+- Firestore nativo usa `persistentLocalCache` con fallback a memoria en dispositivos sin soporte.
+- Toolkit en `tools/offline` expone `ensureOfflineReady`, `useConnectivity`, `enqueueSyncAction` y `useOfflineSync` para reusar lógica offline.
+- Agenda sincroniza aceptaciones/rechazos en segundo plano y marca "Pendiente por sincronizar" mientras espera conexión.
+- Inspect y Matricula cargan datos guardados y mantienen borradores locales para seguir trabajando sin internet.
+
 ## Falta por hacer
 - Chats (pantalla pendiente)
 - Agenda (pantalla pendiente)
