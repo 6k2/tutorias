@@ -28,11 +28,9 @@ const dayLabels = {
   Mar: 'Mar',
   Mie: 'MiÃ©',
   Miac: 'MiÃ©',
-  'MiAc': 'MiÃ©',
   Jue: 'Jue',
   Vie: 'Vie',
   Sab: 'SÃ¡b',
-  'SA?b': 'SÃ¡b',
   Dom: 'Dom',
 };
 
@@ -72,7 +70,7 @@ export default function AgendaScreen() {
   useEffect(() => {
     // En modo offline mostramos un aviso informando que los cambios se sincronizan al reconectar.
     if (connectivity.isOffline) {
-      topAlert.show('Modo sin conexión: los cambios se sincronizarán cuando vuelvas a estar en línea.', 'info');
+      topAlert.show('Modo sin conexiï¿½n: los cambios se sincronizarï¿½n cuando vuelvas a estar en lï¿½nea.', 'info');
     }
   }, [connectivity.isOffline, topAlert]);
 
@@ -166,9 +164,9 @@ export default function AgendaScreen() {
       });
 
       if (result.queued) {
-        topAlert.show('Cambio guardado sin conexión. Se sincronizará automáticamente.', 'info');
+        topAlert.show('Cambio guardado sin conexiï¿½n. Se sincronizarï¿½ automï¿½ticamente.', 'info');
       } else if (nextStatus === RESERVATION_STATUS.CONFIRMED) {
-        topAlert.show('Reserva confirmada. ¡Nos vemos en clase!', 'success');
+        topAlert.show('Reserva confirmada. ï¿½Nos vemos en clase!', 'success');
       } else if (nextStatus === RESERVATION_STATUS.REJECTED) {
         topAlert.show('Solicitud rechazada.', 'info');
       } else if (nextStatus === RESERVATION_STATUS.CANCELLED) {
@@ -197,7 +195,7 @@ export default function AgendaScreen() {
       {(offlineMode || fromCache) && (
         <View style={styles.offlineBadge}>
           <MaterialIcons name="cloud-off" size={18} color="#ffedd5" />
-          <Text style={styles.offlineBadgeText}>Mostrando datos sin conexión</Text>
+          <Text style={styles.offlineBadgeText}>Mostrando datos sin conexiï¿½n</Text>
         </View>
       )}
 
@@ -241,7 +239,7 @@ export default function AgendaScreen() {
           )}
           {activeTab === 'pending' && studentPending.map((item) => (
             <View key={item.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+              <Text style={styles.cardTitle}>{item.subjectName || 'Tutorï¿½a'}</Text>
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
@@ -258,7 +256,7 @@ export default function AgendaScreen() {
           )}
           {activeTab === 'confirmed' && studentConfirmed.map((item) => (
             <View key={item.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+              <Text style={styles.cardTitle}>{item.subjectName || 'Tutorï¿½a'}</Text>
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
@@ -307,7 +305,7 @@ export default function AgendaScreen() {
           )}
           {activeTab === 'pending' && teacherPending.map((item) => (
             <View key={item.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+              <Text style={styles.cardTitle}>{item.subjectName || 'Tutorï¿½a'}</Text>
               <Text style={styles.cardSubtitle}>Estudiante: {item.studentDisplayName || item.studentId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               {item._pendingSync && (
@@ -347,7 +345,7 @@ export default function AgendaScreen() {
           )}
           {activeTab === 'confirmed' && teacherConfirmed.map((item) => (
             <View key={item.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+              <Text style={styles.cardTitle}>{item.subjectName || 'Tutorï¿½a'}</Text>
               <Text style={styles.cardSubtitle}>Estudiante: {item.studentDisplayName || item.studentId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
