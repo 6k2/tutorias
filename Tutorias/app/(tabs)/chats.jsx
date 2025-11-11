@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { ChatLayout } from '../../features/chat/ChatLayout';
 import { ChatSidebar } from '../../features/chat/ChatSidebar';
 import { ChatThread } from '../../features/chat/ChatThread';
@@ -9,6 +10,7 @@ import { useThemeColor } from '../../hooks/useThemeColor';
 import { useChatEnrollments } from '../../features/chat/hooks/useChatEnrollments';
 import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
 import { persistMessage } from '../../features/chat/utils/persistMessage';
+import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 
 export default function ChatsScreen() {
   const currentUser = useAuthUser();
@@ -36,6 +38,10 @@ export default function ChatsScreen() {
   }, []);
 
   const enrollments = useChatEnrollments(currentUser?.uid, currentUser?.role);
+  const isStudent = String(currentUser?.role || '').toLowerCase() === 'student';
+  const materialsInbox = useMaterialsInbox(isStudent ? currentUser?.uid : null, {
+    disabled: !isStudent,
+  });
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -125,38 +131,56 @@ export default function ChatsScreen() {
     ? pendingMessages[selectedConversation.id] || []
     : [];
 
+  const materialsBadgeCount = isStudent ? materialsInbox.newCount || 0 : 0;
+
   return (
-    <ChatLayout
-      sidebar={
-        <ChatSidebar
-          currentUid={currentUser.uid}
-          onSelectConversation={handleSelectConversation}
-          activeConversationId={selectedConversation?.id || null}
-          allowedKeys={enrollments.allowedKeys}
-          metaByKey={enrollments.metaByKey}
-          loadingEnrollments={enrollments.loading}
-        />
-      }
-      thread={
-        <ChatThread
-          conversation={threadProps.conversation}
-          currentUser={currentUser}
-          partner={threadProps.partner}
-          pendingMessages={pendingForActive}
-          onQueueMessage={registerPendingMessage}
-        />
-      }
-      isThreadOpen={Boolean(selectedConversation)}
-      onBack={() => {
-        setSelectedConversation(null);
-        setSelectedPartner(null);
-      }}
-      offline={connectivity.isOffline}
-    />
+    <View style={styles.root}>
+      {isStudent && materialsBadgeCount > 0 && (
+        <View style={styles.materialsBanner}>
+          <MaterialIcons name="cloud-download" size={18} color="#1B1E36" />
+          <Text style={styles.materialsBannerText}>
+            {materialsBadgeCount === 1
+              ? 'Nuevo material de estudio'
+              : `${materialsBadgeCount} materiales nuevos`}
+          </Text>
+        </View>
+      )}
+      <ChatLayout
+        sidebar={
+          <ChatSidebar
+            currentUid={currentUser.uid}
+            onSelectConversation={handleSelectConversation}
+            activeConversationId={selectedConversation?.id || null}
+            allowedKeys={enrollments.allowedKeys}
+            metaByKey={enrollments.metaByKey}
+            loadingEnrollments={enrollments.loading}
+          />
+        }
+        thread={
+          <ChatThread
+            conversation={threadProps.conversation}
+            currentUser={currentUser}
+            partner={threadProps.partner}
+            pendingMessages={pendingForActive}
+            onQueueMessage={registerPendingMessage}
+          />
+        }
+        isThreadOpen={Boolean(selectedConversation)}
+        onBack={() => {
+          setSelectedConversation(null);
+          setSelectedPartner(null);
+        }}
+        offline={connectivity.isOffline}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#101225',
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -165,5 +189,18 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  materialsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFD580',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  materialsBannerText: {
+    color: '#1B1E36',
+    fontWeight: '700',
+    flex: 1,
   },
 });

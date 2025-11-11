@@ -1,7 +1,18 @@
 // Profile screen where users show their best self, xd
 // You can change avatar, bio, pick specialties, and logout.
-import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, Modal, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  TextInput,
+  Modal,
+  ScrollView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -12,6 +23,13 @@ import { useRouter } from 'expo-router';
 import { useTopAlert } from '../../components/TopAlert';
 import { useAuthGuard } from '../../hooks/useAuthGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '../../constants/Colors';
+import { useConfirmedEnrollments } from '../../features/materials/hooks/useConfirmedEnrollments';
+import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
+import { useMaterialDownloadQueue } from '../../features/materials/hooks/useMaterialDownloadQueue';
+import { useMaterialsByReservation } from '../../features/materials/hooks/useMaterialsByReservation';
+import { useOfflineMaterial } from '../../features/materials/hooks/useOfflineMaterial';
+import { toMillis } from '../../features/materials/utils/dates';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -40,6 +58,19 @@ export default function ProfileScreen() {
   ], []);
 
   const [initialData, setInitialData] = useState({ photoURL: '', description: '', specialties: [], username: '', email: '', role: '' });
+  const [materialsModalVisible, setMaterialsModalVisible] = useState(false);
+  const [activeReservation, setActiveReservation] = useState(null);
+  const normalizedRole = String(role || '').toLowerCase();
+  const isStudent = normalizedRole === 'student';
+  const studentEnrollments = useConfirmedEnrollments(
+    isStudent ? user?.uid : null,
+    'student',
+    { disabled: !isStudent }
+  );
+  const materialsInbox = useMaterialsInbox(isStudent ? user?.uid : null, {
+    disabled: !isStudent,
+  });
+  useMaterialDownloadQueue(isStudent ? user?.uid : null);
   // Auth guard centralizado via useAuthGuard
 
   useEffect(() => {
@@ -71,6 +102,68 @@ export default function ProfileScreen() {
     description !== initialData.description ||
     JSON.stringify([...specialties].sort()) !== JSON.stringify([...initialData.specialties].sort())
   );
+
+  const confirmedReservations = isStudent ? studentEnrollments.reservations || [] : [];
+  const materialsByReservation = materialsInbox.byReservation || new Map();
+  const materialViews = materialsInbox.views || {};
+  const totalNewMaterials = materialsInbox.newCount || 0;
+
+  const getMaterialsForReservation = useCallback(
+    (reservationId) => {
+      if (!reservationId) return [];
+      if (materialsByReservation instanceof Map) {
+        return materialsByReservation.get(reservationId) || [];
+      }
+      if (typeof materialsByReservation === 'object' && materialsByReservation !== null) {
+        return materialsByReservation[reservationId] || [];
+      }
+      return [];
+    },
+    [materialsByReservation]
+  );
+
+  const studentMaterialCards = useMemo(() => {
+    if (!isStudent || !confirmedReservations.length) return [];
+    return confirmedReservations.map((reservation) => {
+      const materialsForReservation = getMaterialsForReservation(reservation.id);
+      const hasNew = materialsForReservation.some((material) => {
+        const viewedAt = toMillis(materialViews?.[material.id]?.lastViewedAt);
+        const updatedAt = toMillis(material.updatedAt) || toMillis(material.createdAt);
+        return !viewedAt || updatedAt > viewedAt;
+      });
+      return {
+        reservation,
+        total: materialsForReservation.length,
+        hasNew,
+      };
+    });
+  }, [confirmedReservations, getMaterialsForReservation, materialViews, isStudent]);
+
+  const hasAnyMaterial = studentMaterialCards.some((card) => card.total > 0);
+
+  const markMaterialViewed = materialsInbox.markMaterialViewed || (() => Promise.resolve());
+
+  const handleOpenMaterials = useCallback(
+    (reservation) => {
+      if (!reservation) return;
+      setActiveReservation(reservation);
+      setMaterialsModalVisible(true);
+      const materialsForReservation = getMaterialsForReservation(reservation.id);
+      if (materialsForReservation.length) {
+        markMaterialViewed(materialsForReservation.map((material) => material.id), reservation.id).catch(() => {});
+      }
+    },
+    [getMaterialsForReservation, markMaterialViewed]
+  );
+
+  const handleCloseMaterials = useCallback(() => {
+    setMaterialsModalVisible(false);
+    setActiveReservation(null);
+  }, []);
+
+  const handleContactTutor = useCallback(() => {
+    router.push('/(tabs)/chats');
+  }, [router]);
 
   // Let the user choose a profile picture from their gallery
   const pickPhoto = async () => {
@@ -239,6 +332,78 @@ export default function ProfileScreen() {
         {specialties.length > 0 && <MaterialIcons name="check-circle" color="#34D399" size={20} />}
       </TouchableOpacity>
 
+      {isStudent && (
+        <View style={styles.materialsSection}>
+          <View style={styles.materialsHeader}>
+            <View style={styles.materialsHeaderLeft}>
+              <MaterialIcons name="folder-open" size={20} color="#fff" />
+              <Text style={styles.sectionTitle}>Material de estudio</Text>
+            </View>
+            {totalNewMaterials > 0 && (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>Nuevo {totalNewMaterials}</Text>
+              </View>
+            )}
+          </View>
+
+          {studentMaterialCards.length === 0 && (
+            <View style={styles.materialsEmpty}>
+              <MaterialIcons name="cloud-download" size={32} color="#8C8FA5" />
+              <Text style={styles.materialsEmptyText}>
+                Cuando confirmes una tutoría, verás aquí los archivos que comparta tu docente.
+              </Text>
+              <TouchableOpacity style={styles.chatCtaBtn} onPress={handleContactTutor}>
+                <MaterialIcons name="chat" size={18} color="#1B1E36" />
+                <Text style={styles.chatCtaText}>Ir a chats</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {studentMaterialCards.map((card) => (
+            <View key={card.reservation.id} style={styles.materialCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.materialTitle}>{card.reservation.subjectName || 'Tutoría'}</Text>
+                <Text style={styles.materialMeta}>
+                  Tutor: {card.reservation.teacherDisplayName || card.reservation.teacherId}
+                </Text>
+                <Text style={styles.materialMeta}>Archivos: {card.total}</Text>
+              </View>
+              <View style={styles.materialActionsColumn}>
+                {card.hasNew && (
+                  <View style={styles.newPill}>
+                    <Text style={styles.newPillText}>Nuevo</Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.materialButton,
+                    card.total === 0 && styles.materialButtonDisabled,
+                  ]}
+                  onPress={() => handleOpenMaterials(card.reservation)}
+                  disabled={card.total === 0}
+                >
+                  <MaterialIcons name="cloud-download" size={18} color="#1B1E36" />
+                  <Text style={styles.materialButtonText}>Ver material</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+
+          {studentMaterialCards.length > 0 && !hasAnyMaterial && (
+            <View style={styles.materialsEmpty}>
+              <MaterialIcons name="hourglass-empty" size={26} color="#8C8FA5" />
+              <Text style={styles.materialsEmptyText}>
+                Tus tutores aún no suben archivos. Escríbeles si necesitas algo puntual.
+              </Text>
+              <TouchableOpacity style={styles.chatCtaBtn} onPress={handleContactTutor}>
+                <MaterialIcons name="chat" size={18} color="#1B1E36" />
+                <Text style={styles.chatCtaText}>Abrir chats</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
       {hasChanges && (
         <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
           <Text style={styles.saveBtnText}>Guardar cambios</Text>
@@ -279,9 +444,145 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <MaterialsModal
+        visible={materialsModalVisible}
+        reservation={activeReservation}
+        onClose={handleCloseMaterials}
+        userId={user?.uid}
+        markMaterialViewed={markMaterialViewed}
+        topAlert={topAlert}
+      />
     </ScrollView>
   );
 }
+
+function MaterialsModal({ visible, reservation, onClose, userId, markMaterialViewed, topAlert }) {
+  const reservationId = reservation?.id || null;
+  const { materials, loading } = useMaterialsByReservation(reservationId, {
+    disabled: !visible || !reservationId,
+  });
+
+  useEffect(() => {
+    if (!visible || !reservationId || !materials.length) return;
+    if (typeof markMaterialViewed === 'function') {
+      markMaterialViewed(materials.map((material) => material.id), reservationId).catch(() => {});
+    }
+  }, [visible, reservationId, materials, markMaterialViewed]);
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.materialModalBackdrop}>
+        <View style={styles.materialModalCard}>
+          <View style={styles.materialModalHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.materialModalTitle}>{reservation?.subjectName || 'Material de estudio'}</Text>
+              {reservation?.teacherDisplayName && (
+                <Text style={styles.materialModalSubtitle}>
+                  Tutor: {reservation.teacherDisplayName}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeModalBtn}>
+              <MaterialIcons name="close" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          {loading ? (
+            <View style={styles.modalLoading}>
+              <ActivityIndicator color={Colors.dark.tint} />
+              <Text style={styles.modalLoadingText}>Cargando archivos...</Text>
+            </View>
+          ) : materials.length === 0 ? (
+            <View style={styles.modalEmpty}>
+              <MaterialIcons name="cloud-off" size={30} color="#8C8FA5" />
+              <Text style={styles.modalEmptyText}>Aún no hay materiales para esta tutoría.</Text>
+            </View>
+          ) : (
+            materials.map((material) => (
+              <MaterialRow key={material.id} material={material} userId={userId} topAlert={topAlert} />
+            ))
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function MaterialRow({ material, userId, topAlert }) {
+  const offline = useOfflineMaterial({ uid: userId, material });
+
+  const handleDownload = useCallback(async () => {
+    try {
+      await offline.download();
+      topAlert?.show?.('Descarga lista', 'success');
+    } catch (error) {
+      if (error?.message) {
+        topAlert?.show?.(error.message, 'error');
+      }
+    }
+  }, [offline, topAlert]);
+
+  const handleOpen = useCallback(async () => {
+    try {
+      await offline.open();
+    } catch (error) {
+      if (error?.message) {
+        topAlert?.show?.(error.message, 'error');
+      }
+    }
+  }, [offline, topAlert]);
+
+  const sizeLabel = formatBytes(material.sizeBytes);
+  const updatedLabel = formatMaterialDate(material.updatedAt || material.createdAt);
+  const statusIcon =
+    offline.status === 'ready'
+      ? 'cloud-done'
+      : offline.status === 'queued'
+      ? 'cloud-queue'
+      : offline.status === 'downloading'
+      ? 'downloading'
+      : 'cloud-download';
+
+  return (
+    <View style={styles.materialRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.materialRowTitle}>{material.title || material.fileName || 'Material'}</Text>
+        <Text style={styles.materialRowMeta}>
+          {sizeLabel} · {updatedLabel}
+        </Text>
+        {material.description ? (
+          <Text style={styles.materialRowDescription}>{material.description}</Text>
+        ) : null}
+      </View>
+      <View style={styles.materialRowActions}>
+        <TouchableOpacity
+          onPress={handleDownload}
+          style={styles.materialSmallBtn}
+          disabled={offline.status === 'downloading'}
+        >
+          <MaterialIcons name={statusIcon} size={18} color="#1B1E36" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleOpen} style={styles.materialSmallBtn}>
+          <MaterialIcons name="open-in-new" size={18} color="#1B1E36" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const formatBytes = (bytes) => {
+  if (!bytes || Number.isNaN(bytes)) return 'Tamaño desconocido';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatMaterialDate = (value) => {
+  const ms = toMillis(value);
+  if (!ms) return 'Sin fecha';
+  const date = new Date(ms);
+  return date.toLocaleDateString();
+};
 
 const styles = StyleSheet.create({
   centered: {
@@ -385,6 +686,76 @@ const styles = StyleSheet.create({
   },
   selectorBoxActive: { backgroundColor: '#3A3D5A' },
   selectorText: { color: '#fff', marginLeft: 10 },
+  materialsSection: {
+    marginTop: 20,
+    backgroundColor: '#2C2F48',
+    borderRadius: 14,
+    padding: 14,
+  },
+  materialsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  materialsHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionTitle: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  newBadge: {
+    backgroundColor: '#FF8E53',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  newBadgeText: { color: '#1B1E36', fontWeight: '800' },
+  materialsEmpty: {
+    marginTop: 10,
+    backgroundColor: '#232647',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    gap: 8,
+  },
+  materialsEmptyText: { color: '#C7C9D9', textAlign: 'center' },
+  chatCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFD580',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  chatCtaText: { color: '#1B1E36', fontWeight: '800' },
+  materialCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#232647',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  materialTitle: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  materialMeta: { color: '#C7C9D9', fontSize: 12, marginTop: 2 },
+  materialActionsColumn: { alignItems: 'flex-end', gap: 6 },
+  newPill: {
+    backgroundColor: '#34D399',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  newPillText: { color: '#053B2B', fontWeight: '800', fontSize: 12 },
+  materialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFD580',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  materialButtonDisabled: { opacity: 0.4 },
+  materialButtonText: { color: '#1B1E36', fontWeight: '800' },
   saveBtn: {
     marginTop: 16,
     backgroundColor: '#FF8E53',
@@ -437,6 +808,51 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF8E53',
   },
   modalSaveText: { color: '#fff', fontWeight: '800' },
+  materialModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  materialModalCard: {
+    backgroundColor: '#1B1E36',
+    borderRadius: 18,
+    padding: 16,
+    maxHeight: '80%',
+  },
+  materialModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 12,
+  },
+  materialModalTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  materialModalSubtitle: { color: '#C7C9D9', fontSize: 13, marginTop: 2 },
+  closeModalBtn: { padding: 6, borderRadius: 12, backgroundColor: '#2C2F48' },
+  modalLoading: { alignItems: 'center', gap: 8, paddingVertical: 20 },
+  modalLoadingText: { color: '#C7C9D9' },
+  modalEmpty: { alignItems: 'center', gap: 8, paddingVertical: 20 },
+  modalEmptyText: { color: '#C7C9D9', textAlign: 'center' },
+  materialRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#2C2F48',
+    gap: 12,
+  },
+  materialRowTitle: { color: '#fff', fontWeight: '700' },
+  materialRowMeta: { color: '#C7C9D9', fontSize: 12, marginTop: 2 },
+  materialRowDescription: { color: '#9AA3B2', fontSize: 12, marginTop: 4 },
+  materialRowActions: { flexDirection: 'row', gap: 8 },
+  materialSmallBtn: {
+    backgroundColor: '#FFD580',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 

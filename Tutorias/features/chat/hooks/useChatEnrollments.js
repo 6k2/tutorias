@@ -1,66 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../../../app/config/firebase';
-import { RESERVATION_STATUS } from '../../../constants/firestore';
+import { useMemo } from 'react';
+import { useConfirmedEnrollments } from '../../materials/hooks/useConfirmedEnrollments';
 
 const emptySet = new Set();
 const emptyMap = new Map();
 
 export function useChatEnrollments(uid, role) {
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [fromCache, setFromCache] = useState(false);
+  const { reservations, loading, fromCache } = useConfirmedEnrollments(uid, role);
 
-  useEffect(() => {
-    if (!uid) {
-      setRecords([]);
-      setLoading(false);
-      setFromCache(false);
-      return () => {};
-    }
-
-    const normalizedRole = String(role || 'student').toLowerCase();
-    const field = normalizedRole === 'teacher' ? 'teacherId' : 'studentId';
-    const reservationsQuery = query(
-      collection(db, 'reservations'),
-      where(field, '==', uid),
-      where('status', '==', RESERVATION_STATUS.CONFIRMED)
-    );
-
-    const unsubscribe = onSnapshot(
-      reservationsQuery,
-      (snapshot) => {
-        const rows = snapshot.docs.map((docSnapshot) => {
-          const data = docSnapshot.data() || {};
-          const studentId = data.studentId;
-          const teacherId = data.teacherId;
-          const participants = [studentId, teacherId].filter(Boolean).sort();
-          const conversationKey =
-            participants.length === 2 ? `${participants[0]}_${participants[1]}` : null;
-          return {
-            id: docSnapshot.id,
-            studentId,
-            teacherId,
-            subjectKey: data.subjectKey || null,
-            subjectName: data.subjectName || '',
-            conversationKey,
-            reservation: data,
-          };
-        });
-        setRecords(rows.filter((row) => row.conversationKey));
-        setFromCache(snapshot.metadata?.fromCache ?? false);
-        setLoading(false);
-      },
-      (error) => {
-        console.error('chat: failed to load enrollments', error);
-        setRecords([]);
-        setFromCache(false);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [uid, role]);
+  const records = useMemo(() => {
+    if (!reservations.length) return [];
+    return reservations
+      .map((row) => {
+        const studentId = row.studentId;
+        const teacherId = row.teacherId;
+        const participants = [studentId, teacherId].filter(Boolean).sort();
+        const conversationKey =
+          participants.length === 2 ? `${participants[0]}_${participants[1]}` : null;
+        return {
+          id: row.id,
+          studentId,
+          teacherId,
+          subjectKey: row.subjectKey || null,
+          subjectName: row.subjectName || '',
+          conversationKey,
+          reservation: row.reservation,
+        };
+      })
+      .filter((row) => row.conversationKey);
+  }, [reservations]);
 
   const allowedKeys = useMemo(() => {
     if (!records.length) return emptySet;

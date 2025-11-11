@@ -5,6 +5,19 @@ admin.initializeApp();
 const db = admin.firestore();
 const rtdb = admin.database();
 
+async function getUserNotificationTokens(uid) {
+  if (!uid) return [];
+  const userDoc = await db.collection('users').doc(uid).get();
+  const data = userDoc.data() || {};
+  if (Array.isArray(data.notificationTokens)) {
+    return data.notificationTokens.filter(Boolean);
+  }
+  if (data.notificationTokens && typeof data.notificationTokens === 'object') {
+    return Object.values(data.notificationTokens).filter(Boolean);
+  }
+  return [];
+}
+
 exports.onAuthCreate = functions.auth.user().onCreate(async (user) => {
   const { uid, email, displayName } = user;
   const docRef = db.collection('users').doc(uid);
@@ -35,14 +48,7 @@ exports.onMessageCreate = functions.firestore
       return null;
     }
 
-    const userDoc = await db.collection('users').doc(recipient).get();
-    const data = userDoc.data() || {};
-    let tokens = [];
-    if (Array.isArray(data.notificationTokens)) {
-      tokens = data.notificationTokens.filter(Boolean);
-    } else if (data.notificationTokens && typeof data.notificationTokens === 'object') {
-      tokens = Object.values(data.notificationTokens).filter(Boolean);
-    }
+    const tokens = await getUserNotificationTokens(recipient);
 
     if (!tokens.length) {
       await snapshot.ref.update({ notified: true });
@@ -70,5 +76,51 @@ exports.onMessageCreate = functions.firestore
     });
 
     await snapshot.ref.update({ notified: true });
+    return null;
+  });
+
+exports.onTutoringMaterialCreate = functions.firestore
+  .document('tutoringMaterials/{materialId}')
+  .onCreate(async (snapshot, context) => {
+    const material = snapshot.data();
+    if (!material?.studentId) {
+      return null;
+    }
+
+    const tokens = await getUserNotificationTokens(material.studentId);
+    if (!tokens.length) {
+      return null;
+    }
+
+    let subjectName = 'Tutoría';
+    let teacherName = 'Tu tutor';
+    try {
+      const reservationSnap = await db.collection('reservations').doc(material.reservationId).get();
+      if (reservationSnap.exists) {
+        const reservationData = reservationSnap.data() || {};
+        subjectName = reservationData.subjectName || subjectName;
+        teacherName =
+          reservationData.teacherDisplayName ||
+          reservationData.teacherName ||
+          reservationData.teacherId ||
+          teacherName;
+      }
+    } catch (error) {
+      console.warn('onTutoringMaterialCreate: reservation lookup failed', error);
+    }
+
+    const materialTitle = material.title || 'Nuevo material de estudio';
+    await admin.messaging().sendMulticast({
+      tokens,
+      notification: {
+        title: teacherName,
+        body: `${materialTitle} · ${subjectName}`,
+      },
+      data: {
+        reservationId: material.reservationId || '',
+        materialId: context.params.materialId,
+      },
+    });
+
     return null;
   });

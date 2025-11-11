@@ -19,6 +19,7 @@ export function ChatSidebar({
   allowedKeys,
   metaByKey,
   loadingEnrollments,
+  onCreateConversation,
 }) {
   const [search, setSearch] = useState('');
   const { items, loading, fromCache } = useUserConversations(currentUid, {
@@ -57,11 +58,18 @@ export function ChatSidebar({
           placeholderTextColor={`${borderColor}aa`}
           style={[styles.searchInput, { color: textColor, borderColor: `${borderColor}55` }]}
         />
-        {fromCache && (
-          <View style={[styles.cacheBadge, { borderColor: `${borderColor}44` }]}>
-            <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
-          </View>
-        )}
+        <View style={styles.headerButtons}>
+          {fromCache && (
+            <View style={[styles.cacheBadge, { borderColor: `${borderColor}44` }]}>
+              <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
+            </View>
+          )}
+          {typeof onCreateConversation === 'function' && (
+            <Pressable onPress={() => onCreateConversation()} style={[styles.newButton, { borderColor: `${borderColor}44` }]}> 
+              <Text style={{ color: tintColor, fontWeight: '700' }}>Nuevo</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {filteredItems.length === 0 ? (
@@ -204,6 +212,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  newButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   cacheBadgeText: {
     fontSize: 12,

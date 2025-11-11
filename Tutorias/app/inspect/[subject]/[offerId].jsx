@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -6,6 +6,8 @@ import { doc, getDoc, runTransaction, collection, query, where, onSnapshot, serv
 import { db } from '../../config/firebase';
 import { useTopAlert } from '../../../components/TopAlert';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
+import { useConnectivity } from '../../../tools/offline';
+import { useUploadMaterial } from '../../../features/materials/hooks/useUploadMaterial';
 import { OFFERS_COLLECTION, RESERVATIONS_COLLECTION, RESERVATION_STATUS } from '../../../constants/firestore';
 
 const dayLabels = {
@@ -41,6 +43,7 @@ export default function OfferDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const topAlert = useTopAlert();
+  const connectivity = useConnectivity();
   const { user, ready } = useAuthGuard({ dest: 'Reserva', delayMs: 400 });
   const offerId = decodeURIComponent(params.offerId || '');
   const subjectKey = decodeURIComponent(params.subject || '');
@@ -51,11 +54,21 @@ export default function OfferDetailScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [existingReservations, setExistingReservations] = useState([]);
+  const [teacherReservations, setTeacherReservations] = useState([]);
 
   const teacherName = useMemo(() => {
     if (!offer) return '';
     return offer.username || offer.teacherDisplayName || 'Docente';
   }, [offer]);
+
+  const {
+    pickAndUpload,
+    uploading: uploadingMaterial,
+    reservationId: uploadingReservationId,
+  } = useUploadMaterial({
+    teacherId: user?.uid || '',
+    teacherName,
+  });
 
   const schedule = useMemo(() => (Array.isArray(offer?.schedule) ? offer.schedule : []), [offer?.schedule]);
 
@@ -118,6 +131,30 @@ export default function OfferDetailScreen() {
     });
     return () => unsub();
   }, [offerId, user?.uid]);
+
+  useEffect(() => {
+    if (!isOwnOffer || !offerId) {
+      setTeacherReservations([]);
+      return () => {};
+    }
+    const teacherQuery = query(
+      collection(db, RESERVATIONS_COLLECTION),
+      where('offerId', '==', offerId),
+      where('status', '==', RESERVATION_STATUS.CONFIRMED)
+    );
+    const unsub = onSnapshot(
+      teacherQuery,
+      (snap) => {
+        const rows = [];
+        snap.forEach((item) => rows.push({ id: item.id, ...item.data() }));
+        setTeacherReservations(rows);
+      },
+      (error) => {
+        console.error('offer detail: teacher reservations watch failed', error);
+      }
+    );
+    return () => unsub();
+  }, [isOwnOffer, offerId]);
 
   useEffect(() => {
     if (ready && !user) {
@@ -233,6 +270,31 @@ export default function OfferDetailScreen() {
     }
   };
 
+  const handleUploadMaterial = useCallback(
+    async (reservation) => {
+      if (!reservation) return;
+      if (connectivity.isOffline) {
+        topAlert.show('Conéctate para subir archivos', 'info');
+        return;
+      }
+      try {
+        const result = await pickAndUpload({
+          id: reservation.id,
+          reservationId: reservation.id,
+          studentId: reservation.studentId,
+          subjectKey: reservation.subjectKey || subjectKey,
+          subjectName,
+        });
+        if (result?.cancelled) return;
+        topAlert.show('Material publicado ✅', 'success');
+      } catch (error) {
+        const message = error?.message || 'No se pudo subir el material';
+        topAlert.show(message, 'error');
+      }
+    },
+    [pickAndUpload, connectivity.isOffline, subjectKey, subjectName, topAlert]
+  );
+
   if (!ready) return null;
   if (loading) {
     return (
@@ -344,6 +406,48 @@ export default function OfferDetailScreen() {
           <Text style={styles.bookBtnText}>Reservar</Text>
         )}
       </TouchableOpacity>
+
+      {isOwnOffer && (
+        <View style={[styles.section, { marginBottom: 24 }]}>
+          <Text style={styles.sectionTitle}>Mis estudiantes</Text>
+          {teacherReservations.length === 0 ? (
+            <Text style={styles.sectionText}>Aún no hay reservas confirmadas.</Text>
+          ) : (
+            teacherReservations.map((reservation) => (
+              <View key={reservation.id} style={styles.teacherReservationCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>
+                    {reservation.studentDisplayName || reservation.studentId || 'Estudiante'}
+                  </Text>
+                  {reservation.slot && (
+                    <Text style={styles.sectionText}>{formatSlot(reservation.slot)}</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.uploadBtn,
+                    ((uploadingMaterial && uploadingReservationId === reservation.id) || connectivity.isOffline) &&
+                      styles.uploadBtnDisabled,
+                  ]}
+                  onPress={() => handleUploadMaterial(reservation)}
+                  disabled={
+                    (uploadingMaterial && uploadingReservationId === reservation.id) || connectivity.isOffline
+                  }
+                >
+                  {uploadingMaterial && uploadingReservationId === reservation.id ? (
+                    <ActivityIndicator size="small" color="#1B1E36" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="upload-file" size={18} color="#1B1E36" />
+                      <Text style={styles.uploadBtnText}>Subir material</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -416,4 +520,24 @@ const styles = StyleSheet.create({
   },
   bookBtnDisabled: { opacity: 0.4 },
   bookBtnText: { color: '#1B1E36', fontWeight: '900', fontSize: 16 },
+  teacherReservationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2C2F48',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 12,
+    gap: 12,
+  },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFD580',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  uploadBtnDisabled: { opacity: 0.4 },
+  uploadBtnText: { color: '#1B1E36', fontWeight: '800' },
 });
