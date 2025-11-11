@@ -1,17 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View, Modal, TextInput, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ensureConversationRecord } from '../../features/chat/api/conversations';
 import { ChatLayout } from '../../features/chat/ChatLayout';
 import { ChatSidebar } from '../../features/chat/ChatSidebar';
 import { ChatThread } from '../../features/chat/ChatThread';
 import { useAuthUser } from '../../features/chat/hooks/useAuthUser';
-import { useSelfPresence } from '../../features/chat/hooks/usePresence';
-import { useThemeColor } from '../../hooks/useThemeColor';
 import { useChatEnrollments } from '../../features/chat/hooks/useChatEnrollments';
-import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
-import { ensureConversationRecord } from '../../features/chat/api/conversations';
+import { useSelfPresence } from '../../features/chat/hooks/usePresence';
 import { persistMessage } from '../../features/chat/utils/persistMessage';
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
+import { useThemeColor } from '../../hooks/useThemeColor';
+import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
 
 export default function ChatsScreen() {
   const currentUser = useAuthUser();
@@ -41,7 +41,7 @@ export default function ChatsScreen() {
     };
   }, []);
 
-  const enrollments = useChatEnrollments(currentUser?.uid, currentUser?.role);
+  const enrollments = useChatEnrollments(currentUser);
   const isStudent = String(currentUser?.role || '').toLowerCase() === 'student';
   const materialsInbox = useMaterialsInbox(isStudent ? currentUser?.uid : null, {
     disabled: !isStudent,
@@ -99,21 +99,87 @@ export default function ChatsScreen() {
     { isOffline: connectivity.isOffline }
   );
 
+  const ensurePartnerProfile = useCallback(
+    (conversation, candidate) => {
+      if (!conversation) return candidate || null;
+      const currentUid = currentUser?.uid;
+      const candidateHasValidUid = candidate?.uid && candidate.uid !== currentUid;
+      if (candidateHasValidUid) {
+        return candidate;
+      }
+
+      const participants = Array.isArray(conversation.participants)
+        ? conversation.participants
+        : [];
+      const participantMatch = participants.find(
+        (participant) => participant?.uid && participant.uid !== currentUid
+      );
+      if (participantMatch) {
+        return participantMatch;
+      }
+
+      const meta = conversation.enrollmentMeta || {};
+      const participantUids = Array.isArray(conversation.participantUids)
+        ? conversation.participantUids
+        : [];
+      const fallbackUid =
+        participantUids.find((uid) => uid && uid !== currentUid) ||
+        (meta.studentId && meta.studentId !== currentUid
+          ? meta.studentId
+          : meta.teacherId && meta.teacherId !== currentUid
+          ? meta.teacherId
+          : null);
+
+      if (!fallbackUid) {
+        return candidate?.uid ? candidate : candidate || null;
+      }
+
+      const fallbackName =
+        (meta.studentId === fallbackUid && (meta.studentDisplayName || 'Sin nombre')) ||
+        (meta.teacherId === fallbackUid && (meta.teacherDisplayName || 'Sin nombre')) ||
+        candidate?.displayName ||
+        'Sin nombre';
+
+      const fallbackRole =
+        meta.studentId === fallbackUid
+          ? 'student'
+          : meta.teacherId === fallbackUid
+          ? 'teacher'
+          : candidate?.role || null;
+
+      return {
+        uid: fallbackUid,
+        displayName: fallbackName,
+        photoURL: candidate?.photoURL || null,
+        role: fallbackRole,
+        conversationId: conversation.id,
+        subjectKey: meta.subjectKey || candidate?.subjectKey || null,
+        subjectName: meta.subjectName || candidate?.subjectName || null,
+      };
+    },
+    [currentUser?.uid]
+  );
+
+  const ensuredSelectedPartner = useMemo(() => {
+    if (!selectedConversation) return null;
+    return ensurePartnerProfile(selectedConversation, selectedPartner);
+  }, [ensurePartnerProfile, selectedConversation, selectedPartner]);
+
   const threadProps = useMemo(() => {
     if (!selectedConversation) return { conversation: null, partner: null };
-    if (selectedPartner) {
-      return { conversation: selectedConversation, partner: selectedPartner };
-    }
-    const partner = selectedConversation.participants?.find(
-      (participant) => participant.uid !== currentUser?.uid
-    );
-    return { conversation: selectedConversation, partner: partner || null };
-  }, [selectedConversation, selectedPartner, currentUser?.uid]);
+    return {
+      conversation: selectedConversation,
+      partner: ensuredSelectedPartner,
+    };
+  }, [selectedConversation, ensuredSelectedPartner]);
 
-  const handleSelectConversation = useCallback((conversation, partner) => {
-    setSelectedConversation(conversation);
-    setSelectedPartner(partner || null);
-  }, []);
+  const handleSelectConversation = useCallback(
+    (conversation, partner) => {
+      setSelectedConversation(conversation);
+      setSelectedPartner(ensurePartnerProfile(conversation, partner));
+    },
+    [ensurePartnerProfile]
+  );
 
   if (!bootReady || currentUser === undefined) {
     return (

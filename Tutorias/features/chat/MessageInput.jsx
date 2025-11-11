@@ -146,7 +146,11 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
   );
 
   const handleSend = useCallback(async () => {
-    if (!conversationId || !currentUser?.uid || !partner?.uid) return;
+    if (!conversationId || !currentUser?.uid) return;
+    if (!partner?.uid) {
+      setError('No se pudo identificar al destinatario.');
+      return;
+    }
     if (!text.trim() && !attachment) return;
 
     setIsSending(true);

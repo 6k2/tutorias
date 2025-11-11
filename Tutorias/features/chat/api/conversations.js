@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDocs, limit, query, serverTimestamp, updateDoc, where, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 
 const REQUIRED_FIELDS = {
