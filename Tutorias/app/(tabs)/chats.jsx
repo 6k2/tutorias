@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, Modal, TextInput, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ChatLayout } from '../../features/chat/ChatLayout';
 import { ChatSidebar } from '../../features/chat/ChatSidebar';
@@ -9,6 +9,7 @@ import { useSelfPresence } from '../../features/chat/hooks/usePresence';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { useChatEnrollments } from '../../features/chat/hooks/useChatEnrollments';
 import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
+import { ensureConversationRecord } from '../../features/chat/api/conversations';
 import { persistMessage } from '../../features/chat/utils/persistMessage';
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 
@@ -19,6 +20,9 @@ export default function ChatsScreen() {
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [pendingMessages, setPendingMessages] = useState({});
   const [bootReady, setBootReady] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createUid, setCreateUid] = useState('');
+  const [createName, setCreateName] = useState('');
 
   useSelfPresence(currentUser?.uid);
 
@@ -135,6 +139,52 @@ export default function ChatsScreen() {
 
   return (
     <View style={styles.root}>
+      <Modal visible={!!createModalVisible} animationType="slide" transparent>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#101225', padding: 16, borderRadius: 12 }}>
+            <Text style={{ color: textColor, fontWeight: '700', marginBottom: 8 }}>Crear conversación</Text>
+            <TextInput
+              placeholder="UID del destinatario"
+              placeholderTextColor="#888"
+              value={createUid}
+              onChangeText={setCreateUid}
+              style={{ borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 8, color: textColor, marginBottom: 8 }}
+            />
+            <TextInput
+              placeholder="Nombre (opcional)"
+              placeholderTextColor="#888"
+              value={createName}
+              onChangeText={setCreateName}
+              style={{ borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 8, color: textColor, marginBottom: 12 }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              <Pressable onPress={() => setCreateModalVisible(false)} style={{ padding: 8 }}>
+                <Text style={{ color: '#999' }}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  if (!createUid) return;
+                  const other = { uid: createUid, displayName: createName || 'Sin nombre' };
+                  try {
+                    const ref = await ensureConversationRecord({ myUser: currentUser, otherUser: other, meta: null });
+                    if (ref) {
+                      setSelectedConversation({ id: ref.id, participants: [{ uid: currentUser.uid, displayName: currentUser.displayName || 'Sin nombre' }, other] });
+                    }
+                  } catch (e) {
+                    console.error('failed create conversation', e);
+                  }
+                  setCreateModalVisible(false);
+                  setCreateUid('');
+                  setCreateName('');
+                }}
+                style={{ padding: 8 }}
+              >
+                <Text style={{ color: tintColor, fontWeight: '700' }}>Crear</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       {isStudent && materialsBadgeCount > 0 && (
         <View style={styles.materialsBanner}>
           <MaterialIcons name="cloud-download" size={18} color="#1B1E36" />
@@ -154,6 +204,7 @@ export default function ChatsScreen() {
             allowedKeys={enrollments.allowedKeys}
             metaByKey={enrollments.metaByKey}
             loadingEnrollments={enrollments.loading}
+            onCreateConversation={() => setCreateModalVisible(true)}
           />
         }
         thread={
