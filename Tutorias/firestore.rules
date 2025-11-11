@@ -1,18 +1,244 @@
-rules_version='2'
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2025, 10, 7);
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function conversationPath(conversationId) {
+      return /databases/$(database)/documents/conversations/$(conversationId);
+    }
+
+    function authInConversation(conversationId) {
+      return isSignedIn()
+        && exists(conversationPath(conversationId))
+        && get(conversationPath(conversationId)).data.participantUids.hasAny([request.auth.uid]);
+    }
+
+    function reservationPath(reservationId) {
+      return /databases/$(database)/documents/reservations/$(reservationId);
+    }
+
+    function reservationExists(reservationId) {
+      return reservationId is string
+        && reservationId.size() > 0
+        && exists(reservationPath(reservationId));
+    }
+
+    function reservationData(reservationId) {
+      return get(reservationPath(reservationId)).data;
+    }
+
+    function authOwnsReservation(reservationId) {
+      return isSignedIn()
+        && reservationExists(reservationId)
+        && reservationData(reservationId).teacherId == request.auth.uid;
+    }
+
+    function authInReservation(reservationId) {
+      return isSignedIn()
+        && reservationExists(reservationId)
+        && (
+          reservationData(reservationId).teacherId == request.auth.uid
+          || reservationData(reservationId).studentId == request.auth.uid
+        );
+    }
+
+    function materialPath(materialId) {
+      return /databases/$(database)/documents/tutoringMaterials/$(materialId);
+    }
+
+    function materialExists(materialId) {
+      return exists(materialPath(materialId));
+    }
+
+    function materialData(materialId) {
+      return get(materialPath(materialId)).data;
+    }
+
+    match /conversations/{conversationId} {
+      allow create: if isSignedIn()
+        && request.resource.data.participantUids.size() == 2
+        && request.resource.data.participantUids.hasAny([request.auth.uid])
+        && request.resource.data.conversationKey ==
+          (request.resource.data.participantUids[0] < request.resource.data.participantUids[1]
+            ? request.resource.data.participantUids[0] + '_' + request.resource.data.participantUids[1]
+            : request.resource.data.participantUids[1] + '_' + request.resource.data.participantUids[0])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow read: if authInConversation(conversationId);
+
+      allow update: if authInConversation(conversationId)
+        && request.resource.data.conversationKey == resource.data.conversationKey
+        && request.resource.data.participantUids == resource.data.participantUids
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.subjectKey == resource.data.subjectKey
+        && request.resource.data.subjectName == resource.data.subjectName
+        && request.resource.data.reservationId == resource.data.reservationId
+        && request.resource.data.keys().hasOnly([
+          'conversationKey',
+          'participantUids',
+          'createdAt',
+          'updatedAt',
+          'lastMessage',
+          'lastMessageAt',
+          'unreadBy',
+          'lastMessageMeta',
+          'subjectKey',
+          'subjectName',
+          'reservationId'
+        ])
+        && request.resource.data.lastMessageAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /conversations/{conversationId}/participants/{participantId} {
+      allow read: if authInConversation(conversationId);
+      allow create: if authInConversation(conversationId)
+        && request.resource.data.uid in get(conversationPath(conversationId)).data.participantUids
+        && request.resource.data.conversationId == conversationId;
+      allow update, delete: if authInConversation(conversationId);
+    }
+
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read: if authInConversation(conversationId);
+      allow create: if authInConversation(conversationId)
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.conversationId == conversationId
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /tutoringMaterials/{materialId} {
+      function requestReservationId() {
+        return request.resource.data.reservationId;
+      }
+
+      function validMaterialFields(data) {
+        return data.keys().hasOnly([
+          'reservationId',
+          'subjectKey',
+          'teacherId',
+          'studentId',
+          'title',
+          'description',
+          'storagePath',
+          'fileName',
+          'mimeType',
+          'sizeBytes',
+          'createdAt',
+          'updatedAt',
+          'offlineReady',
+          'md5'
+        ]);
+      }
+
+      allow get, list: if materialExists(materialId)
+        && authInReservation(materialData(materialId).reservationId);
+
+      allow create: if isSignedIn()
+        && reservationExists(requestReservationId())
+        && authOwnsReservation(requestReservationId())
+        && validMaterialFields(request.resource.data)
+        && request.resource.data.teacherId == reservationData(requestReservationId()).teacherId
+        && request.resource.data.studentId == reservationData(requestReservationId()).studentId
+        && request.resource.data.subjectKey == reservationData(requestReservationId()).subjectKey
+        && request.resource.data.storagePath.matches('^materials/' + requestReservationId() + '/[A-Za-z0-9._\\-]+$')
+        && request.resource.data.fileName.matches('^[A-Za-z0-9._\\-]{3,}$')
+        && request.resource.data.md5.matches('^[A-Fa-f0-9]{32}$')
+        && request.resource.data.mimeType is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && (!request.resource.data.description || request.resource.data.description is string)
+        && (!request.resource.data.description || request.resource.data.description.size() <= 600)
+        && request.resource.data.subjectKey is string
+        && request.resource.data.teacherId is string
+        && request.resource.data.studentId is string
+        && request.resource.data.sizeBytes is int
+        && request.resource.data.sizeBytes <= 25 * 1024 * 1024
+        && request.resource.data.offlineReady is bool
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if materialExists(materialId)
+        && resource.data.teacherId == request.auth.uid
+        && request.resource.data.reservationId == resource.data.reservationId
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.studentId == resource.data.studentId
+        && request.resource.data.subjectKey == resource.data.subjectKey
+        && request.resource.data.storagePath == resource.data.storagePath
+        && request.resource.data.fileName == resource.data.fileName
+        && request.resource.data.mimeType == resource.data.mimeType
+        && request.resource.data.sizeBytes == resource.data.sizeBytes
+        && request.resource.data.md5 == resource.data.md5
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly([
+          'reservationId',
+          'subjectKey',
+          'teacherId',
+          'studentId',
+          'title',
+          'description',
+          'storagePath',
+          'fileName',
+          'mimeType',
+          'sizeBytes',
+          'createdAt',
+          'updatedAt',
+          'offlineReady',
+          'md5'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 140
+        && (!request.resource.data.description || request.resource.data.description is string)
+        && (!request.resource.data.description || request.resource.data.description.size() <= 600)
+        && request.resource.data.offlineReady is bool
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if materialExists(materialId)
+        && resource.data.teacherId == request.auth.uid;
+    }
+
+    match /tutoringMaterials/{materialId}/attachments/{attachmentId} {
+      allow get, list: if materialExists(materialId)
+        && authInReservation(materialData(materialId).reservationId);
+
+      allow create: if materialExists(materialId)
+        && materialData(materialId).teacherId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'chunkIndex',
+          'downloadUrl',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.chunkIndex is int
+        && request.resource.data.chunkIndex >= 0
+        && request.resource.data.downloadUrl is string
+        && request.resource.data.downloadUrl.matches('^https://')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if materialExists(materialId)
+        && materialData(materialId).teacherId == request.auth.uid
+        && request.resource.data.chunkIndex == resource.data.chunkIndex
+        && request.resource.data.downloadUrl == resource.data.downloadUrl
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly([
+          'chunkIndex',
+          'downloadUrl',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if materialExists(materialId)
+        && materialData(materialId).teacherId == request.auth.uid;
     }
   }
 }

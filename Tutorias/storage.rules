@@ -1,12 +1,73 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    function conversationPath(conversationId) {
+      return /databases/(default)/documents/conversations/$(conversationId);
+    }
+
+    function authInConversation(conversationId) {
+      return request.auth != null
+        && exists(conversationPath(conversationId))
+        && get(conversationPath(conversationId)).data.participantUids.hasAny([request.auth.uid]);
+    }
+
+    function reservationDoc(reservationId) {
+      return firestore.get(/databases/(default)/documents/reservations/$(reservationId));
+    }
+
+    function reservationExists(reservationId) {
+      return reservationId is string
+        && reservationId.size() > 0
+        && reservationDoc(reservationId) != null
+        && reservationDoc(reservationId).data != null;
+    }
+
+    function reservationParticipant(reservationId) {
+      return request.auth != null
+        && reservationExists(reservationId)
+        && (
+          reservationDoc(reservationId).data.teacherId == request.auth.uid
+          || reservationDoc(reservationId).data.studentId == request.auth.uid
+        );
+    }
+
+    function reservationTeacher(reservationId) {
+      return request.auth != null
+        && reservationExists(reservationId)
+        && reservationDoc(reservationId).data.teacherId == request.auth.uid;
+    }
+
+    function allowedMaterialContentType() {
+      return request.resource.contentType.matches('application/(pdf|zip|x-zip-compressed)')
+        || request.resource.contentType.matches('application/vnd.ms-powerpoint')
+        || request.resource.contentType.matches('application/vnd.ms-powerpoint.presentation.macroenabled.12')
+        || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.presentationml.(presentation|slideshow)')
+        || request.resource.contentType.matches('application/msword')
+        || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+        || request.resource.contentType.matches('image/(png|jpe?g|gif)')
+        || request.resource.contentType.matches('application/octet-stream');
+    }
+
+    match /conversations/{conversationId}/{messageId}/{fileName} {
+      allow read, write: if authInConversation(conversationId);
+    }
+
+    match /materials/{reservationId}/{fileName} {
+      allow read: if reservationParticipant(reservationId);
+
+      allow write: if reservationTeacher(reservationId)
+        && request.resource != null
+        && request.resource.size <= 25 * 1024 * 1024
+        && fileName.matches('^[A-Za-z0-9._\\-]{3,}$')
+        && request.resource.name.matches('^materials/' + reservationId + '/[A-Za-z0-9._\\-]+$')
+        && allowedMaterialContentType();
+
+      allow delete: if reservationTeacher(reservationId);
+    }
+
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read, write: if false; // TODO: abrir rutas adicionales cuando existan.
     }
   }
 }
