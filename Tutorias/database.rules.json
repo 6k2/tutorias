@@ -1,7 +1,21 @@
 {
-  /* Visit https://firebase.google.com/docs/database/security to learn more about security rules. */
   "rules": {
+    "status": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "typing": {
+      "$conversationId": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
     ".read": false,
-    ".write": false
+    ".write": false,
+    "_todo": "Limitar lecturas a participantes cuando guardemos metadata adicional"
   }
 }

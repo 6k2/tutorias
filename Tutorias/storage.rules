@@ -1,12 +1,23 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
+    function conversationPath(conversationId) {
+      return /databases/(default)/documents/conversations/$(conversationId);
+    }
+
+    function authInConversation(conversationId) {
+      return request.auth != null
+        && exists(conversationPath(conversationId))
+        && get(conversationPath(conversationId)).data.participantUids.hasAny([request.auth.uid]);
+    }
+
+    match /conversations/{conversationId}/{messageId}/{fileName} {
+      allow read, write: if authInConversation(conversationId);
+    }
+
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read, write: if false; // TODO: abrir rutas adicionales cuando existan.
     }
   }
 }
