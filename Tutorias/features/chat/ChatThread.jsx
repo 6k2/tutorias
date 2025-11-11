@@ -26,13 +26,19 @@ import { MessageInput } from './MessageInput';
 
 const PAGE_SIZE = 20;
 
-export function ChatThread({ conversation, currentUser, partner }) {
+export function ChatThread({
+  conversation,
+  currentUser,
+  partner,
+  pendingMessages = [],
+  onQueueMessage,
+}) {
   const conversationId = conversation?.id;
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [reachedEnd, setReachedEnd] = useState(false);
-  const [lastDocument, setLastDocument] = useState(null);
+  const [cursor, setCursor] = useState(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
 
   const presence = usePresence(partner?.uid);
@@ -45,7 +51,7 @@ export function ChatThread({ conversation, currentUser, partner }) {
 
   useEffect(() => {
     setMessages([]);
-    setLastDocument(null);
+    setCursor(null);
     setReachedEnd(false);
   }, [conversationId]);
 
@@ -54,21 +60,24 @@ export function ChatThread({ conversation, currentUser, partner }) {
 
     setLoading(true);
     const messagesRef = collection(db, 'conversations', conversationId, 'messages');
-    const messagesQuery = query(
-      messagesRef,
-      orderBy('createdAt', 'desc'),
-      limit(PAGE_SIZE)
-    );
+    const messagesQuery = query(messagesRef, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
 
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const docs = snapshot.docs.map((docSnapshot) => ({
-        id: docSnapshot.id,
-        ...docSnapshot.data(),
-      }));
-      setMessages(docs);
-      setLastDocument(snapshot.docs[snapshot.docs.length - 1] || null);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        const docs = snapshot.docs.map((docSnapshot) => ({
+          id: docSnapshot.id,
+          ...docSnapshot.data(),
+        }));
+        setMessages(docs.reverse());
+        setCursor(snapshot.docs[snapshot.docs.length - 1] || null);
+        setLoading(false);
+      },
+      (error) => {
+        console.error('chat: message watch failed', error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [conversationId]);
@@ -78,9 +87,7 @@ export function ChatThread({ conversation, currentUser, partner }) {
     const conversationRef = doc(db, 'conversations', conversationId);
     updateDoc(conversationRef, {
       unreadBy: arrayRemove(currentUser.uid),
-    }).catch(() => {
-      // ignore errors (offline mode will retry later)
-    });
+    }).catch(() => {});
   }, [conversationId, currentUser?.uid]);
 
   useEffect(() => {
@@ -88,17 +95,15 @@ export function ChatThread({ conversation, currentUser, partner }) {
     return subscribeTyping(conversationId, partner.uid, setIsPartnerTyping);
   }, [conversationId, partner?.uid]);
 
-  const loadMore = useCallback(async () => {
-    if (!conversationId || loadingMore || reachedEnd || !lastDocument) {
-      return;
-    }
-    setLoadingMore(true);
+  const loadOlder = useCallback(async () => {
+    if (!conversationId || !cursor || reachedEnd || loadingOlder) return;
+    setLoadingOlder(true);
     try {
       const messagesRef = collection(db, 'conversations', conversationId, 'messages');
       const nextQuery = query(
         messagesRef,
         orderBy('createdAt', 'desc'),
-        startAfter(lastDocument),
+        startAfter(cursor),
         limit(PAGE_SIZE)
       );
       const snapshot = await getDocs(nextQuery);
@@ -110,35 +115,47 @@ export function ChatThread({ conversation, currentUser, partner }) {
         id: docSnapshot.id,
         ...docSnapshot.data(),
       }));
-      setMessages((prev) => [...prev, ...docs]);
-      setLastDocument(snapshot.docs[snapshot.docs.length - 1]);
+      setMessages((prev) => [...docs.reverse(), ...prev]);
+      setCursor(snapshot.docs[snapshot.docs.length - 1]);
     } catch (error) {
-      console.error('Error al cargar más mensajes', error);
+      console.error('chat: load older failed', error);
     } finally {
-      setLoadingMore(false);
+      setLoadingOlder(false);
     }
-  }, [conversationId, loadingMore, reachedEnd, lastDocument]);
+  }, [conversationId, cursor, reachedEnd, loadingOlder]);
 
-  const sortedMessages = useMemo(() => {
-    return [...messages].sort((a, b) => {
-      const aTime = a.createdAt?.toMillis?.() || 0;
-      const bTime = b.createdAt?.toMillis?.() || 0;
-      return bTime - aTime;
-    });
-  }, [messages]);
+  const normalizedPending = useMemo(() => {
+    if (!pendingMessages || pendingMessages.length === 0) return [];
+    return pendingMessages.map((pending) => ({
+      id: `pending:${pending.clientId}`,
+      text: pending.text,
+      createdAt: pending.queuedAt,
+      from: pending.from || currentUser?.uid,
+      to: pending.to || partner?.uid,
+      pending: true,
+    }));
+  }, [pendingMessages, currentUser?.uid, partner?.uid]);
+
+  const combinedMessages = useMemo(() => {
+    const merged = [...messages, ...normalizedPending];
+    merged.sort((a, b) => getMillis(a) - getMillis(b));
+    return merged;
+  }, [messages, normalizedPending]);
 
   if (!conversationId) {
     return (
-      <View style={[styles.emptyThread, { backgroundColor: background }]}> 
-        <Text style={[styles.emptyText, { color: mutedColor }]}>Selecciona una conversación.</Text>
+      <View style={[styles.emptyThread, { backgroundColor: background }]}>
+        <Text style={[styles.emptyText, { color: mutedColor }]}>
+          Selecciona una conversacion.
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: background }]}> 
-      <View style={[styles.header, { borderBottomColor: borderColor }]}> 
-        <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}> 
+    <View style={[styles.container, { backgroundColor: background }]}>
+      <View style={[styles.header, { borderBottomColor: borderColor }]}>
+        <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}>
           {partner?.photoURL ? (
             <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
           ) : (
@@ -148,16 +165,20 @@ export function ChatThread({ conversation, currentUser, partner }) {
           )}
         </View>
         <View style={styles.headerInfo}>
-          <Text style={[styles.headerName, { color: textColor }]}> 
+          <Text style={[styles.headerName, { color: textColor }]}>
             {partner?.displayName || 'Sin nombre'}
           </Text>
-          <Text style={[styles.headerPresence, { color: mutedColor }]}> 
-            {presence.online ? 'En línea' : formatLastSeen(presence.lastSeen)}
+          <Text style={[styles.headerPresence, { color: mutedColor }]}>
+            {isPartnerTyping
+              ? 'Escribiendo...'
+              : presence.online
+              ? 'En linea'
+              : formatLastSeen(presence.lastSeen)}
           </Text>
         </View>
       </View>
       <FlatList
-        data={sortedMessages}
+        data={combinedMessages}
         renderItem={({ item }) => (
           <MessageBubble
             message={item}
@@ -171,26 +192,31 @@ export function ChatThread({ conversation, currentUser, partner }) {
         inverted
         contentContainerStyle={styles.listContent}
         onEndReachedThreshold={0.2}
-        onEndReached={loadMore}
+        onEndReached={loadOlder}
         ListFooterComponent={
-          loadingMore ? <ActivityIndicator color={tintColor} style={styles.loadingMore} /> : null
+          loadingOlder ? <ActivityIndicator color={tintColor} style={styles.loadingMore} /> : null
         }
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator color={tintColor} style={styles.emptyLoader} />
           ) : (
             <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: mutedColor }]}>No hay mensajes aún.</Text>
+              <Text style={[styles.emptyText, { color: mutedColor }]}>No hay mensajes aun.</Text>
             </View>
           )
         }
       />
       {isPartnerTyping && (
         <View style={styles.typingRow}>
-          <Text style={[styles.typingText, { color: mutedColor }]}>Escribiendo…</Text>
+          <Text style={[styles.typingText, { color: mutedColor }]}>Escribiendo...</Text>
         </View>
       )}
-      <MessageInput conversationId={conversationId} currentUser={currentUser} partner={partner} />
+      <MessageInput
+        conversationId={conversationId}
+        currentUser={currentUser}
+        partner={partner}
+        onQueueMessage={onQueueMessage}
+      />
     </View>
   );
 }
@@ -198,19 +224,26 @@ export function ChatThread({ conversation, currentUser, partner }) {
 function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor }) {
   const alignStyle = isOwnMessage ? styles.rowRight : styles.rowLeft;
   const bubbleStyle = isOwnMessage
-    ? [styles.bubbleOwn, { backgroundColor: tintColor }]
-    : [styles.bubbleOther, { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` }];
+    ? [styles.bubbleBase, styles.bubbleOwn, { backgroundColor: tintColor }]
+    : [
+        styles.bubbleBase,
+        styles.bubbleOther,
+        { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` },
+      ];
   const displayTextColor = isOwnMessage ? '#fff' : textColor;
 
   return (
     <View style={[styles.messageRow, alignStyle]}>
-      <View style={[styles.bubbleBase, ...bubbleStyle]}>
+      <View style={bubbleStyle}>
         {message.text ? (
           <Text style={[styles.messageText, { color: displayTextColor }]}>{message.text}</Text>
         ) : null}
         {message.attachmentURL ? (
           <Text style={[styles.attachmentText, { color: displayTextColor }]}>Archivo adjunto</Text>
         ) : null}
+        {message.pending && (
+          <Text style={[styles.pendingText, { color: displayTextColor }]}>Pendiente...</Text>
+        )}
         <Text style={[styles.timestamp, { color: isOwnMessage ? '#ffffffcc' : mutedColor }]}>
           {formatTimestamp(message.createdAt)}
         </Text>
@@ -219,20 +252,32 @@ function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor
   );
 }
 
+function getMillis(message) {
+  const value = message?.createdAt;
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (value?.toMillis) return value.toMillis();
+  if (typeof value?.seconds === 'number') return value.seconds * 1000;
+  return 0;
+}
+
 function formatTimestamp(timestamp) {
   if (!timestamp) return '';
   try {
+    if (typeof timestamp === 'number') {
+      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch (_error) {
+  } catch {
     return '';
   }
 }
 
 function formatLastSeen(lastSeen) {
-  if (!lastSeen) return 'Desconectado';
+  if (!lastSeen) return 'Fuera de linea';
   const date = new Date(lastSeen);
-  return `Última vez ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  return `Visto ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 const styles = StyleSheet.create({
@@ -315,6 +360,10 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 11,
     textAlign: 'right',
+  },
+  pendingText: {
+    fontSize: 11,
+    marginBottom: 2,
   },
   emptyState: {
     padding: 24,

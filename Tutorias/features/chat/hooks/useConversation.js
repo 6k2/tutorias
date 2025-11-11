@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -15,179 +15,374 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 
-export function useConversation(myUser, otherUser) {
+const REQUIRED_FIELDS = {
+  lastMessage: null,
+  lastMessageAt: null,
+  lastMessageMeta: null,
+  unreadBy: [],
+};
+
+const buildConversationKey = (uidA, uidB) => {
+  if (!uidA || !uidB) return null;
+  const sorted = [uidA, uidB].sort();
+  return `${sorted[0]}_${sorted[1]}`;
+};
+
+const sanitizeProfile = (user = {}, conversationId, meta) => ({
+  uid: user?.uid,
+  displayName: user?.displayName || 'Sin nombre',
+  photoURL: user?.photoURL || null,
+  role: user?.role || null,
+  conversationId,
+  subjectKey: meta?.subjectKey || null,
+  subjectName: meta?.subjectName || null,
+});
+
+const fetchParticipants = async (conversationRef) => {
+  const participantsCollection = collection(conversationRef, 'participants');
+  const snapshot = await getDocs(participantsCollection);
+  return snapshot.docs.map((participantDoc) => ({
+    id: participantDoc.id,
+    ...participantDoc.data(),
+  }));
+};
+
+const ensureConversationRecord = async ({ myUser, otherUser, meta }) => {
   const myUid = myUser?.uid;
   const otherUid = otherUser?.uid;
+  if (!myUid || !otherUid) {
+    return null;
+  }
+
+  const conversationKey = buildConversationKey(myUid, otherUid);
+  if (!conversationKey) {
+    return null;
+  }
+
+  const sorted = [myUid, otherUid].sort();
+  const conversationsCol = collection(db, 'conversations');
+  const existingQuery = query(
+    conversationsCol,
+    where('conversationKey', '==', conversationKey),
+    limit(1)
+  );
+  const existingSnapshot = await getDocs(existingQuery);
+
+  let conversationRef;
+  if (existingSnapshot.empty) {
+    const timestamp = serverTimestamp();
+    conversationRef = await addDoc(conversationsCol, {
+      conversationKey,
+      participantUids: sorted,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      ...REQUIRED_FIELDS,
+      subjectKey: meta?.subjectKey || null,
+      subjectName: meta?.subjectName || '',
+      reservationId: meta?.id || null,
+    });
+  } else {
+    conversationRef = existingSnapshot.docs[0].ref;
+    const data = existingSnapshot.docs[0].data() || {};
+    const updates = {};
+    if (!Array.isArray(data.participantUids) || data.participantUids.length !== 2) {
+      updates.participantUids = sorted;
+    }
+    Object.entries(REQUIRED_FIELDS).forEach(([key, defaultValue]) => {
+      if (!(key in data)) {
+        updates[key] = defaultValue;
+      }
+    });
+    if (meta && meta.subjectKey && data.subjectKey !== meta.subjectKey) {
+      updates.subjectKey = meta.subjectKey;
+      updates.subjectName = meta.subjectName || '';
+      updates.reservationId = meta.id || null;
+    }
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(conversationRef, updates);
+    }
+  }
+
+  await Promise.all([
+    setDoc(
+      doc(conversationRef, 'participants', myUid),
+      sanitizeProfile(myUser, conversationRef.id, meta),
+      { merge: true }
+    ),
+    setDoc(
+      doc(conversationRef, 'participants', otherUid),
+      sanitizeProfile(otherUser, conversationRef.id, meta),
+      { merge: true }
+    ),
+  ]);
+
+  return conversationRef;
+};
+
+export function useConversation(myUser, otherUser, options = {}) {
+  const { allowedKeys = null, metaByKey = null } = options;
   const [conversation, setConversation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const participantsRef = useRef([]);
 
+  const conversationKey = buildConversationKey(myUser?.uid, otherUser?.uid);
+  const enrollmentMeta = conversationKey ? metaByKey?.get?.(conversationKey) : null;
+  const isAllowed = !allowedKeys || !conversationKey || allowedKeys.has(conversationKey);
+
   useEffect(() => {
-    if (!myUid || !otherUid) {
+    if (!myUser?.uid || !otherUser?.uid || !conversationKey) {
       setConversation(null);
-      return undefined;
+      setLoading(false);
+      setError(null);
+      return () => {};
     }
 
-    const sorted = [myUid, otherUid].sort();
-    const conversationKey = sorted.join('_');
+    if (allowedKeys && allowedKeys.size && !isAllowed) {
+      setConversation(null);
+      setLoading(false);
+      setError(new Error('not-authorized'));
+      return () => {};
+    }
+
+    let unsubscribe = () => {};
+    let active = true;
     setLoading(true);
-    let unsubscribeConversation = () => {};
+    setError(null);
 
-    async function ensureConversation() {
-      const conversationsCol = collection(db, 'conversations');
-      const existingQuery = query(
-        conversationsCol,
-        where('conversationKey', '==', conversationKey),
-        limit(1)
-      );
-      const existingSnapshot = await getDocs(existingQuery);
-
-      let conversationRef;
-      if (existingSnapshot.empty) {
-        conversationRef = await addDoc(conversationsCol, {
-          conversationKey,
-          participantUids: sorted,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          lastMessage: null,
-          lastMessageAt: null,
-          unreadBy: [],
+    const bootstrap = async () => {
+      try {
+        const conversationRef = await ensureConversationRecord({
+          myUser,
+          otherUser,
+          meta: enrollmentMeta,
         });
-      } else {
-        conversationRef = existingSnapshot.docs[0].ref;
-        const data = existingSnapshot.docs[0].data();
-        if (!data.participantUids) {
-          await updateDoc(conversationRef, { participantUids: sorted });
-        }
-      }
-
-      const participantsCollection = collection(conversationRef, 'participants');
-      const safeMyProfile = {
-        uid: myUid,
-        displayName: myUser?.displayName || 'Sin nombre',
-        photoURL: myUser?.photoURL || null,
-        conversationId: conversationRef.id,
-      };
-      const safeOtherProfile = {
-        uid: otherUid,
-        displayName: otherUser?.displayName || 'Sin nombre',
-        photoURL: otherUser?.photoURL || null,
-        conversationId: conversationRef.id,
-      };
-      await Promise.all([
-        setDoc(doc(participantsCollection, myUid), safeMyProfile, { merge: true }),
-        setDoc(doc(participantsCollection, otherUid), safeOtherProfile, { merge: true }),
-      ]);
-
-      const participantsSnapshot = await getDocs(participantsCollection);
-      participantsRef.current = participantsSnapshot.docs.map((participantDoc) => ({
-        id: participantDoc.id,
-        ...participantDoc.data(),
-      }));
-
-      unsubscribeConversation = onSnapshot(conversationRef, (conversationDoc) => {
-        if (!conversationDoc.exists()) {
-          setConversation(null);
+        if (!conversationRef || !active) {
           return;
         }
-        setConversation({
-          id: conversationDoc.id,
-          ...conversationDoc.data(),
-          participants: participantsRef.current,
-        });
-      });
-    }
 
-    ensureConversation()
-      .catch((error) => {
-        console.error('No se pudo preparar la conversación', error);
-      })
-      .finally(() => setLoading(false));
+        participantsRef.current = await fetchParticipants(conversationRef);
+        unsubscribe = onSnapshot(conversationRef, (conversationDoc) => {
+          if (!conversationDoc.exists()) {
+            setConversation(null);
+            return;
+          }
+          setConversation({
+            id: conversationDoc.id,
+            ...conversationDoc.data(),
+            participants: participantsRef.current,
+            enrollmentMeta,
+          });
+        });
+      } catch (bootstrapError) {
+        console.error('chat: unable to prepare conversation', bootstrapError);
+        if (active) {
+          setError(bootstrapError);
+          setConversation(null);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    bootstrap();
 
     return () => {
-      unsubscribeConversation();
+      active = false;
+      unsubscribe();
     };
-  }, [myUid, otherUid, myUser?.displayName, myUser?.photoURL, otherUser?.displayName, otherUser?.photoURL]);
+  }, [
+    myUser?.uid,
+    myUser?.displayName,
+    myUser?.photoURL,
+    otherUser?.uid,
+    otherUser?.displayName,
+    otherUser?.photoURL,
+    conversationKey,
+    allowedKeys,
+    isAllowed,
+    enrollmentMeta,
+  ]);
 
-  return { conversation, loading, participants: conversation?.participants || [] };
+  return {
+    conversation,
+    loading,
+    participants: conversation?.participants || [],
+    error,
+  };
 }
 
-export function useUserConversations(uid) {
+export function useUserConversations(uid, options = {}) {
+  const { allowedKeys = null, metaByKey = null } = options;
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fromCache, setFromCache] = useState(false);
+  const conversationWatchers = useRef(new Map());
+  const conversationKeysById = useRef(new Map());
+
+  const isConversationAllowed = useCallback(
+    (data) => {
+      if (!data?.conversationKey) return false;
+      if (allowedKeys && allowedKeys.size && !allowedKeys.has(data.conversationKey)) {
+        return false;
+      }
+      return true;
+    },
+    [allowedKeys]
+  );
+
+  const enrollmentForKey = useCallback(
+    (key) => (metaByKey?.get?.(key) ? metaByKey.get(key) : null),
+    [metaByKey]
+  );
+
+  const dropConversation = useCallback((conversationId) => {
+    setItems((prev) => prev.filter((item) => item.id !== conversationId));
+    const unsubscribe = conversationWatchers.current.get(conversationId);
+    if (unsubscribe) {
+      unsubscribe();
+    }
+    conversationWatchers.current.delete(conversationId);
+    conversationKeysById.current.delete(conversationId);
+  }, []);
 
   useEffect(() => {
     if (!uid) {
       setItems([]);
-      return undefined;
+      setLoading(false);
+      setFromCache(false);
+      conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
+      conversationWatchers.current.clear();
+      conversationKeysById.current.clear();
+      return () => {};
     }
 
+    setLoading(true);
     const participantsQuery = query(
       collectionGroup(db, 'participants'),
       where('uid', '==', uid)
     );
 
-    const conversationWatchers = new Map();
+    const unsubscribeParticipants = onSnapshot(
+      participantsQuery,
+      (snapshot) => {
+        setFromCache((prev) => prev || snapshot.metadata?.fromCache || false);
+        const nextConversationIds = new Set();
+        snapshot.forEach((docSnapshot) => {
+          const data = docSnapshot.data();
+          if (data?.conversationId) {
+            nextConversationIds.add(data.conversationId);
+          }
+        });
 
-    const unsubscribeParticipants = onSnapshot(participantsQuery, (snapshot) => {
-      const nextConversationIds = new Set();
-      snapshot.forEach((docSnapshot) => {
-        const data = docSnapshot.data();
-        if (data?.conversationId) {
-          nextConversationIds.add(data.conversationId);
-        }
-      });
-
-      conversationWatchers.forEach((unsubscribe, conversationId) => {
-        if (!nextConversationIds.has(conversationId)) {
-          unsubscribe();
-          conversationWatchers.delete(conversationId);
-          setItems((prev) => prev.filter((item) => item.id !== conversationId));
-        }
-      });
-
-      nextConversationIds.forEach((conversationId) => {
-        if (conversationWatchers.has(conversationId)) {
-          return;
-        }
-
-        const conversationRef = doc(db, 'conversations', conversationId);
-        const unsubscribeConversation = onSnapshot(conversationRef, async (conversationDoc) => {
-          if (!conversationDoc.exists()) {
+        conversationWatchers.current.forEach((unsubscribe, conversationId) => {
+          if (!nextConversationIds.has(conversationId)) {
+            unsubscribe();
+            conversationWatchers.current.delete(conversationId);
+            conversationKeysById.current.delete(conversationId);
             setItems((prev) => prev.filter((item) => item.id !== conversationId));
+          }
+        });
+
+        nextConversationIds.forEach((conversationId) => {
+          if (conversationWatchers.current.has(conversationId)) {
             return;
           }
 
-          const participantsSnapshot = await getDocs(collection(conversationRef, 'participants'));
-          const participants = participantsSnapshot.docs.map((participantDoc) => ({
-            id: participantDoc.id,
-            ...participantDoc.data(),
-          }));
+          const conversationRef = doc(db, 'conversations', conversationId);
+          const unsubscribeConversation = onSnapshot(
+            conversationRef,
+            async (conversationDoc) => {
+              setFromCache((prev) => prev || conversationDoc.metadata?.fromCache || false);
 
-          setItems((prev) => {
-            const filtered = prev.filter((item) => item.id !== conversationId);
-            const nextItem = {
-              id: conversationDoc.id,
-              ...conversationDoc.data(),
-              participants,
-            };
-            return [...filtered, nextItem].sort((a, b) => {
-              const aTime = a.lastMessageAt?.toMillis?.() || 0;
-              const bTime = b.lastMessageAt?.toMillis?.() || 0;
-              return bTime - aTime;
-            });
-          });
+              if (!conversationDoc.exists()) {
+                dropConversation(conversationId);
+                return;
+              }
+
+              const data = conversationDoc.data();
+              conversationKeysById.current.set(conversationId, data.conversationKey);
+              if (!isConversationAllowed(data)) {
+                dropConversation(conversationId);
+                return;
+              }
+
+              let participants = [];
+              try {
+                participants = await fetchParticipants(conversationRef);
+              } catch (error) {
+                console.error('chat: failed to load participants', error);
+              }
+
+              const enrollmentMeta = enrollmentForKey(data.conversationKey);
+              const nextItem = {
+                id: conversationDoc.id,
+                ...data,
+                participants,
+                enrollmentMeta,
+              };
+
+              setItems((prev) => {
+                const filtered = prev.filter((item) => item.id !== conversationDoc.id);
+                const merged = [...filtered, nextItem];
+                merged.sort((a, b) => {
+                  const timeA =
+                    a.lastMessageAt?.toMillis?.() ||
+                    a.updatedAt?.toMillis?.() ||
+                    0;
+                  const timeB =
+                    b.lastMessageAt?.toMillis?.() ||
+                    b.updatedAt?.toMillis?.() ||
+                    0;
+                  return timeB - timeA;
+                });
+                return merged;
+              });
+              setLoading(false);
+            },
+            (error) => {
+              console.error('chat: failed conversation watch', error);
+            }
+          );
+
+          conversationWatchers.current.set(conversationId, unsubscribeConversation);
         });
 
-        conversationWatchers.set(conversationId, unsubscribeConversation);
-      });
-    });
+        if (nextConversationIds.size === 0) {
+          setLoading(false);
+        }
+      },
+      (error) => {
+        console.error('chat: participants watch failed', error);
+        setItems([]);
+        setLoading(false);
+      }
+    );
 
     return () => {
       unsubscribeParticipants();
-      conversationWatchers.forEach((unsubscribe) => unsubscribe());
-      conversationWatchers.clear();
+      conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
+      conversationWatchers.current.clear();
+      conversationKeysById.current.clear();
     };
-  }, [uid]);
+  }, [uid, isConversationAllowed, enrollmentForKey, dropConversation]);
 
-  return items;
+  useEffect(() => {
+    if (!allowedKeys || !allowedKeys.size) {
+      return;
+    }
+    conversationKeysById.current.forEach((key, conversationId) => {
+      if (!allowedKeys.has(key)) {
+        dropConversation(conversationId);
+      }
+    });
+  }, [allowedKeys, dropConversation]);
+
+  return {
+    items,
+    loading,
+    fromCache,
+  };
 }

@@ -1,16 +1,29 @@
 import { useEffect, useState } from 'react';
 import {
   getDatabase,
+  onDisconnect,
   onValue,
   ref as databaseRef,
+  remove,
   set,
-  onDisconnect,
 } from 'firebase/database';
 import { app } from '../../../app/config/firebase';
 
 const realtimeDb = getDatabase(app);
+const PRESENCE_TTL = 60 * 1000;
+const TYPING_TTL = 3000;
 
-// Listen to a user's presence info from the Realtime Database.
+const now = () => Date.now();
+
+const isPresenceValid = (payload) => {
+  if (!payload) return false;
+  if (!payload.online) return false;
+  if (typeof payload.expiresAt === 'number') {
+    return payload.expiresAt > now();
+  }
+  return true;
+};
+
 export function usePresence(uid) {
   const [presence, setPresence] = useState({ online: false, lastSeen: null });
 
@@ -19,52 +32,79 @@ export function usePresence(uid) {
     const statusRef = databaseRef(realtimeDb, `status/${uid}`);
     const unsubscribe = onValue(statusRef, (snapshot) => {
       const value = snapshot.val();
-      if (!value) {
-        setPresence({ online: false, lastSeen: null });
+      if (!value || !isPresenceValid(value)) {
+        setPresence({ online: false, lastSeen: value?.lastSeen || null });
         return;
       }
       setPresence({
-        online: Boolean(value.online),
+        online: true,
         lastSeen: typeof value.lastSeen === 'number' ? value.lastSeen : null,
       });
     });
-
     return unsubscribe;
   }, [uid]);
 
   return presence;
 }
 
-// Simple helper that keeps the logged user marked as online.
-// We reuse this in ChatLayout to toggle presence when mounting/unmounting the screen.
 export function useSelfPresence(uid) {
   useEffect(() => {
     if (!uid) return undefined;
 
     const statusRef = databaseRef(realtimeDb, `status/${uid}`);
     const connectedRef = databaseRef(realtimeDb, '.info/connected');
+    let heartbeatTimer = null;
+
+    const writePresence = () => {
+      const timestamp = now();
+      return set(statusRef, {
+        online: true,
+        lastSeen: timestamp,
+        expiresAt: timestamp + PRESENCE_TTL,
+      }).catch((error) => {
+        console.warn('presence: heartbeat failed', error);
+      });
+    };
+
+    const startHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+      }
+      writePresence();
+      heartbeatTimer = setInterval(writePresence, PRESENCE_TTL / 2);
+    };
+
+    const stopHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    };
 
     const unsubscribe = onValue(connectedRef, (snapshot) => {
       if (!snapshot.val()) {
         return;
       }
 
-      const now = Date.now();
-      set(statusRef, { online: true, lastSeen: now }).catch((error) => {
-        console.warn('No se pudo marcar presencia inmediata', error);
-      });
-
+      startHeartbeat();
       const disconnect = onDisconnect(statusRef);
       disconnect
-        .set({ online: false, lastSeen: Date.now() })
-        .catch((error) => console.warn('onDisconnect fallo', error));
+        .set({
+          online: false,
+          lastSeen: now(),
+          expiresAt: now() + PRESENCE_TTL,
+        })
+        .catch((error) => console.warn('presence: onDisconnect failed', error));
     });
 
     return () => {
+      stopHeartbeat();
       unsubscribe();
-      set(statusRef, { online: false, lastSeen: Date.now() }).catch(() => {
-        // ignore: app might be closing
-      });
+      set(statusRef, {
+        online: false,
+        lastSeen: now(),
+        expiresAt: now() + PRESENCE_TTL,
+      }).catch(() => {});
     };
   }, [uid]);
 }
@@ -73,7 +113,12 @@ export function subscribeTyping(conversationId, uid, callback) {
   if (!conversationId || !uid) return () => {};
   const typingRef = databaseRef(realtimeDb, `typing/${conversationId}/${uid}`);
   const unsubscribe = onValue(typingRef, (snapshot) => {
-    callback(Boolean(snapshot.val()));
+    const value = snapshot.val();
+    if (!value || typeof value.expiresAt !== 'number') {
+      callback(false);
+      return;
+    }
+    callback(value.expiresAt > now());
   });
   return unsubscribe;
 }
@@ -81,5 +126,12 @@ export function subscribeTyping(conversationId, uid, callback) {
 export function setTyping(conversationId, uid, value) {
   if (!conversationId || !uid) return Promise.resolve();
   const typingRef = databaseRef(realtimeDb, `typing/${conversationId}/${uid}`);
-  return set(typingRef, value);
+  if (!value) {
+    return remove(typingRef).catch(() => {});
+  }
+  const timestamp = now();
+  return set(typingRef, {
+    value: true,
+    expiresAt: timestamp + TYPING_TTL,
+  });
 }

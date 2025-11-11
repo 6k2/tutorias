@@ -10,10 +10,21 @@ import {
 } from 'react-native';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { useUserConversations } from './hooks/useConversation';
+import { usePresence } from './hooks/usePresence';
 
-export function ChatSidebar({ currentUid, onSelectConversation, activeConversationId }) {
+export function ChatSidebar({
+  currentUid,
+  onSelectConversation,
+  activeConversationId,
+  allowedKeys,
+  metaByKey,
+  loadingEnrollments,
+}) {
   const [search, setSearch] = useState('');
-  const conversations = useUserConversations(currentUid);
+  const { items, loading, fromCache } = useUserConversations(currentUid, {
+    allowedKeys,
+    metaByKey,
+  });
 
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -22,22 +33,23 @@ export function ChatSidebar({ currentUid, onSelectConversation, activeConversati
 
   const filteredItems = useMemo(() => {
     const queryLower = search.trim().toLowerCase();
-    return conversations.filter((conversation) => {
+    return items.filter((conversation) => {
       if (!queryLower) return true;
       const partner = conversation.participants?.find((item) => item.uid !== currentUid);
       const name = partner?.displayName || 'Sin nombre';
       return name.toLowerCase().includes(queryLower);
     });
-  }, [conversations, search, currentUid]);
+  }, [items, search, currentUid]);
+
+  const emptyCopy = loading
+    ? 'Cargando tus conversaciones...'
+    : loadingEnrollments
+    ? 'Verificando matriculas...'
+    : 'No hay conversaciones disponibles.';
 
   return (
-    <View style={[styles.container, { backgroundColor: background }]}> 
-      <View
-        style={[
-          styles.searchContainer,
-          { borderColor: `${borderColor}40` },
-        ]}
-      >
+    <View style={[styles.container, { backgroundColor: background }]}>
+      <View style={[styles.searchContainer, { borderColor: `${borderColor}40` }]}>
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -45,75 +57,108 @@ export function ChatSidebar({ currentUid, onSelectConversation, activeConversati
           placeholderTextColor={`${borderColor}aa`}
           style={[styles.searchInput, { color: textColor, borderColor: `${borderColor}55` }]}
         />
+        {fromCache && (
+          <View style={[styles.cacheBadge, { borderColor: `${borderColor}44` }]}>
+            <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
+          </View>
+        )}
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {filteredItems.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: borderColor }]}>No hay conversaciones.</Text>
+            <Text style={[styles.emptyText, { color: borderColor }]}>{emptyCopy}</Text>
           </View>
         ) : (
-          filteredItems.map((conversation) => {
-            const partner = conversation.participants?.find((item) => item.uid !== currentUid);
-            const lastMessage = conversation.lastMessage || 'Envía el primer mensaje';
-            const lastMessageAt = conversation.lastMessageAt;
-            const unread = Array.isArray(conversation.unreadBy)
-              ? conversation.unreadBy.includes(currentUid)
-              : false;
-            const isActive = conversation.id === activeConversationId;
-            return (
-              <Pressable
-                key={conversation.id}
-                onPress={() => onSelectConversation(conversation, partner)}
-                style={[
-                  styles.item,
-                  { borderBottomColor: `${borderColor}33` },
-                  isActive && { backgroundColor: `${tintColor}18` },
-                ]}
-              >
-                <View style={styles.avatarWrapper}>
-                  {partner?.photoURL ? (
-                    <Image source={{ uri: partner.photoURL }} style={styles.avatar} />
-                  ) : (
-                    <View
-                      style={[
-                        styles.avatarFallback,
-                        { backgroundColor: `${borderColor}33` },
-                      ]}
-                    >
-                      <Text style={[styles.avatarInitials, { color: textColor }]}>
-                        {partner?.displayName?.[0]?.toUpperCase() || '?'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.itemContent}>
-                  <View style={styles.itemHeader}>
-                    <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
-                      {partner?.displayName || 'Sin nombre'}
-                    </Text>
-                    <Text style={[styles.time, { color: `${borderColor}aa` }]}>
-                      {formatTime(lastMessageAt)}
-                    </Text>
-                  </View>
-                  <View style={styles.itemFooter}>
-                    <Text
-                      style={[
-                        styles.preview,
-                        { color: unread ? tintColor : `${borderColor}cc` },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {lastMessage}
-                    </Text>
-                    {unread && <View style={[styles.unreadDot, { backgroundColor: tintColor }]} />}
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })
+          filteredItems.map((conversation) => (
+            <ConversationRow
+              key={conversation.id}
+              conversation={conversation}
+              currentUid={currentUid}
+              onSelect={onSelectConversation}
+              isActive={conversation.id === activeConversationId}
+              tintColor={tintColor}
+              borderColor={borderColor}
+              textColor={textColor}
+            />
+          ))
         )}
       </ScrollView>
     </View>
+  );
+}
+
+function ConversationRow({
+  conversation,
+  currentUid,
+  onSelect,
+  isActive,
+  tintColor,
+  borderColor,
+  textColor,
+}) {
+  const partner = conversation.participants?.find((item) => item.uid !== currentUid);
+  const presence = usePresence(partner?.uid);
+  const lastMessage = conversation.lastMessage || 'Envia el primer mensaje';
+  const lastMessageAt = conversation.lastMessageAt;
+  const unread = Array.isArray(conversation.unreadBy)
+    ? conversation.unreadBy.includes(currentUid)
+    : false;
+
+  return (
+    <Pressable
+      onPress={() => onSelect(conversation, partner)}
+      style={[
+        styles.item,
+        { borderBottomColor: `${borderColor}33` },
+        isActive && { backgroundColor: `${tintColor}18` },
+      ]}
+    >
+      <View style={styles.avatarWrapper}>
+        {partner?.photoURL ? (
+          <Image source={{ uri: partner.photoURL }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatarFallback, { backgroundColor: `${borderColor}33` }]}>
+            <Text style={[styles.avatarInitials, { color: textColor }]}>
+              {partner?.displayName?.[0]?.toUpperCase() || '?'}
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.itemContent}>
+        <View style={styles.itemHeader}>
+          <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
+            {partner?.displayName || 'Sin nombre'}
+          </Text>
+          <Text style={[styles.time, { color: `${borderColor}aa` }]}>{formatTime(lastMessageAt)}</Text>
+        </View>
+        {conversation.enrollmentMeta?.subjectName ? (
+          <Text style={[styles.subject, { color: `${borderColor}aa` }]} numberOfLines={1}>
+            {conversation.enrollmentMeta.subjectName}
+          </Text>
+        ) : null}
+        <View style={styles.itemFooter}>
+          <Text
+            style={[
+              styles.preview,
+              { color: unread ? tintColor : `${borderColor}cc` },
+            ]}
+            numberOfLines={1}
+          >
+            {lastMessage}
+          </Text>
+          <View
+            style={[
+              styles.presenceDot,
+              { backgroundColor: presence.online ? '#059669' : `${borderColor}55` },
+            ]}
+          />
+          {unread && <View style={[styles.unreadDot, { backgroundColor: tintColor }]} />}
+        </View>
+        <Text style={[styles.presenceText, { color: `${borderColor}aa` }]}>
+          {presence.online ? 'En linea' : formatPresence(presence.lastSeen)}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -122,8 +167,18 @@ function formatTime(timestamp) {
   try {
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch (error) {
+  } catch {
     return '';
+  }
+}
+
+function formatPresence(lastSeen) {
+  if (!lastSeen) return 'Fuera de linea';
+  try {
+    const date = new Date(lastSeen);
+    return `Visto ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } catch {
+    return 'Fuera de linea';
   }
 }
 
@@ -141,6 +196,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  cacheBadge: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  cacheBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingBottom: 32,
@@ -189,18 +256,22 @@ const styles = StyleSheet.create({
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   itemFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   name: {
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
     marginRight: 8,
+  },
+  subject: {
+    fontSize: 12,
+    marginBottom: 2,
   },
   time: {
     fontSize: 12,
@@ -213,5 +284,14 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  presenceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  presenceText: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

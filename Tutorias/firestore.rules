@@ -23,10 +23,36 @@ service cloud.firestore {
         && request.resource.data.conversationKey ==
           (request.resource.data.participantUids[0] < request.resource.data.participantUids[1]
             ? request.resource.data.participantUids[0] + '_' + request.resource.data.participantUids[1]
-            : request.resource.data.participantUids[1] + '_' + request.resource.data.participantUids[0]);
+            : request.resource.data.participantUids[1] + '_' + request.resource.data.participantUids[0])
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
 
-      allow read, update: if authInConversation(conversationId);
-      allow delete: if false; // TODO: crear flujo explícito para borrar conversaciones.
+      allow read: if authInConversation(conversationId);
+
+      allow update: if authInConversation(conversationId)
+        && request.resource.data.conversationKey == resource.data.conversationKey
+        && request.resource.data.participantUids == resource.data.participantUids
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.subjectKey == resource.data.subjectKey
+        && request.resource.data.subjectName == resource.data.subjectName
+        && request.resource.data.reservationId == resource.data.reservationId
+        && request.resource.data.keys().hasOnly([
+          'conversationKey',
+          'participantUids',
+          'createdAt',
+          'updatedAt',
+          'lastMessage',
+          'lastMessageAt',
+          'unreadBy',
+          'lastMessageMeta',
+          'subjectKey',
+          'subjectName',
+          'reservationId'
+        ])
+        && request.resource.data.lastMessageAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
     }
 
     match /conversations/{conversationId}/participants/{participantId} {
@@ -43,7 +69,7 @@ service cloud.firestore {
         && request.resource.data.from == request.auth.uid
         && request.resource.data.conversationId == conversationId
         && request.resource.data.createdAt == request.time;
-      allow update, delete: if false; // Los mensajes no se editan en esta versión.
+      allow update, delete: if false;
     }
   }
 }

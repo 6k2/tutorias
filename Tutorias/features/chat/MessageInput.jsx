@@ -1,59 +1,92 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  arrayUnion,
-  collection,
-  doc,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
 import {
   getDownloadURL,
   getStorage,
   ref as storageRef,
   uploadBytes,
 } from 'firebase/storage';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, db } from '../../app/config/firebase';
+import { app } from '../../app/config/firebase';
 import { setTyping as setTypingFlag } from './hooks/usePresence';
 import { useThemeColor } from '../../hooks/useThemeColor';
+import { enqueueSyncAction, useConnectivity } from '../../tools/offline';
+import { persistMessage } from './utils/persistMessage';
 
-export function MessageInput({ conversationId, currentUser, partner }) {
+export function MessageInput({ conversationId, currentUser, partner, onQueueMessage }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
   const typingTimeout = useRef(null);
+  const connectivity = useConnectivity();
 
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const borderColor = useThemeColor({}, 'icon');
   const tintColor = useThemeColor({}, 'tint');
 
-  useEffect(() => {
-    setText('');
+  const draftKey =
+    currentUser?.uid && conversationId
+      ? `offline:chatDraft:${currentUser.uid}:${conversationId}`
+      : null;
+
+  const restoreDraft = useCallback(async () => {
+    if (!draftKey) {
+      setText('');
+      setAttachment(null);
+      return;
+    }
+    try {
+      const raw = await AsyncStorage.getItem(draftKey);
+      if (!raw) {
+        setText('');
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setText(parsed?.text || '');
+    } catch (draftError) {
+      console.warn('chat: draft restore failed', draftError);
+      setText('');
+    }
     setAttachment(null);
     setError(null);
-  }, [conversationId]);
+  }, [draftKey]);
 
-  useEffect(() => () => {
-    if (typingTimeout.current) {
-      clearTimeout(typingTimeout.current);
-    }
-    if (conversationId && currentUser?.uid) {
-      setTypingFlag(conversationId, currentUser.uid, false);
-    }
-  }, [conversationId, currentUser?.uid]);
+  useEffect(() => {
+    restoreDraft();
+  }, [restoreDraft]);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    AsyncStorage.setItem(draftKey, JSON.stringify({ text })).catch((draftError) => {
+      console.warn('chat: draft persist failed', draftError);
+    });
+  }, [draftKey, text]);
+
+  useEffect(
+    () => () => {
+      if (typingTimeout.current) {
+        clearTimeout(typingTimeout.current);
+      }
+      if (conversationId && currentUser?.uid) {
+        setTypingFlag(conversationId, currentUser.uid, false);
+      }
+    },
+    [conversationId, currentUser?.uid]
+  );
 
   const resetComposer = useCallback(() => {
     setText('');
     setAttachment(null);
+    if (draftKey) {
+      AsyncStorage.removeItem(draftKey).catch(() => {});
+    }
     if (conversationId && currentUser?.uid) {
       setTypingFlag(conversationId, currentUser.uid, false);
     }
-  }, [conversationId, currentUser?.uid]);
+  }, [conversationId, currentUser?.uid, draftKey]);
 
   const handleChangeText = useCallback(
     (value) => {
@@ -65,12 +98,16 @@ export function MessageInput({ conversationId, currentUser, partner }) {
       }
       typingTimeout.current = setTimeout(() => {
         setTypingFlag(conversationId, currentUser.uid, false);
-      }, 2500);
+      }, 3000);
     },
     [conversationId, currentUser?.uid]
   );
 
   const handlePickAttachment = useCallback(async () => {
+    if (connectivity.isOffline) {
+      setError('Conectate para adjuntar archivos.');
+      return;
+    }
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -92,23 +129,12 @@ export function MessageInput({ conversationId, currentUser, partner }) {
       console.error('No se pudo seleccionar archivo', pickError);
       setError('No se pudo seleccionar el archivo.');
     }
-  }, []);
-
-  const sendNotification = useCallback(async (payload) => {
-    try {
-      const functions = getFunctions(app);
-      const notify = httpsCallable(functions, 'sendChatNotification');
-      await notify(payload);
-    } catch (notifyError) {
-      // TODO: manejar tokens no registrados. Por ahora solo dejamos log.
-      console.log('Notificación pendiente de configurar', notifyError);
-    }
-  }, []);
+  }, [connectivity.isOffline]);
 
   const uploadAttachment = useCallback(
-    async (messageId, file) => {
+    async (file) => {
       const storage = getStorage(app);
-      const path = `conversations/${conversationId}/${messageId}/${file.name}`;
+      const path = `conversations/${conversationId}/${Date.now()}-${file.name}`;
       const fileRef = storageRef(storage, path);
       const response = await fetch(file.uri);
       const blob = await response.blob();
@@ -127,41 +153,41 @@ export function MessageInput({ conversationId, currentUser, partner }) {
     setError(null);
 
     try {
-      const messagesCollection = collection(db, 'conversations', conversationId, 'messages');
-      const messageRef = doc(messagesCollection);
-      const messageData = {
+      const trimmed = text.trim();
+      if (connectivity.isOffline) {
+        if (attachment) {
+          setError('No se pueden enviar adjuntos sin conexion.');
+          return;
+        }
+        const payload = {
+          conversationId,
+          from: currentUser.uid,
+          to: partner.uid,
+          text: trimmed,
+          senderName: currentUser.displayName || 'Sin nombre',
+          clientId: `${conversationId}:${Date.now()}`,
+          queuedAt: Date.now(),
+        };
+        const entry = await enqueueSyncAction('chat:sendMessage', payload);
+        onQueueMessage?.(entry, payload);
+        resetComposer();
+        return;
+      }
+
+      let attachmentPayload = { attachmentURL: null, attachmentType: null };
+      if (attachment) {
+        attachmentPayload = await uploadAttachment(attachment);
+      }
+
+      await persistMessage({
         conversationId,
         from: currentUser.uid,
         to: partner.uid,
-        text: text.trim() ? text.trim() : null,
-        attachmentURL: null,
-        attachmentType: null,
-        createdAt: serverTimestamp(),
-      };
-
-      if (attachment) {
-        const { url, type } = await uploadAttachment(messageRef.id, attachment);
-        messageData.attachmentURL = url;
-        messageData.attachmentType = type;
-      }
-
-      await setDoc(messageRef, messageData);
-
-      const conversationRef = doc(db, 'conversations', conversationId);
-      await updateDoc(conversationRef, {
-        lastMessage:
-          messageData.text || (messageData.attachmentType === 'image' ? '📷 Foto' : '📎 Archivo'),
-        lastMessageAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        unreadBy: arrayUnion(partner.uid),
+        text: trimmed,
+        senderName: currentUser.displayName || 'Sin nombre',
+        attachmentURL: attachmentPayload.url,
+        attachmentType: attachmentPayload.type,
       });
-
-      sendNotification({
-        conversationId,
-        to: partner.uid,
-        preview: messageData.text || 'Te enviaron un archivo',
-      });
-
       resetComposer();
     } catch (sendError) {
       console.error('Error al enviar mensaje', sendError);
@@ -169,10 +195,34 @@ export function MessageInput({ conversationId, currentUser, partner }) {
     } finally {
       setIsSending(false);
     }
-  }, [conversationId, currentUser?.uid, partner?.uid, text, attachment, uploadAttachment, sendNotification, resetComposer]);
+  }, [
+    attachment,
+    connectivity.isOffline,
+    conversationId,
+    currentUser?.uid,
+    onQueueMessage,
+    partner?.uid,
+    resetComposer,
+    text,
+    uploadAttachment,
+  ]);
+
+  const canSend = Boolean(text.trim() || attachment);
 
   return (
-    <View style={[styles.container, { borderTopColor: `${borderColor}44`, backgroundColor: background }]}> 
+    <View style={[styles.container, { borderTopColor: `${borderColor}44`, backgroundColor: background }]}>
+      {connectivity.isOffline && (
+        <View
+          style={[
+            styles.offlineBanner,
+            { borderColor: `${borderColor}44`, backgroundColor: `${borderColor}12` },
+          ]}
+        >
+          <Text style={[styles.offlineText, { color: textColor }]}>
+            Sin conexion, enviaremos cuando vuelva.
+          </Text>
+        </View>
+      )}
       {attachment && (
         <View style={styles.attachmentPreview}>
           <Text style={[styles.attachmentLabel, { color: textColor }]}>Adjunto: {attachment.name}</Text>
@@ -182,8 +232,19 @@ export function MessageInput({ conversationId, currentUser, partner }) {
         </View>
       )}
       <View style={styles.row}>
-        <Pressable onPress={handlePickAttachment} style={[styles.iconButton, { borderColor: `${borderColor}55` }]}> 
-          <Text style={[styles.iconButtonText, { color: tintColor }]}>+</Text>
+        <Pressable
+          onPress={handlePickAttachment}
+          style={[styles.iconButton, { borderColor: `${borderColor}55` }]}
+          disabled={connectivity.isOffline}
+        >
+          <Text
+            style={[
+              styles.iconButtonText,
+              { color: connectivity.isOffline ? `${tintColor}66` : tintColor },
+            ]}
+          >
+            +
+          </Text>
         </Pressable>
         <TextInput
           style={[styles.input, { color: textColor, borderColor: `${borderColor}55` }]}
@@ -195,12 +256,12 @@ export function MessageInput({ conversationId, currentUser, partner }) {
         />
         <Pressable
           onPress={handleSend}
-          disabled={isSending || (!text.trim() && !attachment)}
+          disabled={isSending || !canSend}
           style={[
             styles.sendButton,
             {
               backgroundColor: tintColor,
-              opacity: isSending || (!text.trim() && !attachment) ? 0.5 : 1,
+              opacity: isSending || !canSend ? 0.5 : 1,
             },
           ]}
         >
@@ -218,6 +279,16 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  offlineBanner: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  offlineText: {
+    fontSize: 12,
   },
   row: {
     flexDirection: 'row',
