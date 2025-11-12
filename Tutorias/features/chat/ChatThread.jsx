@@ -314,7 +314,6 @@ export function ChatThread({
         currentUser={currentUser}
         partner={partner}
         onQueueMessage={onQueueMessage}
-        onSendFeedback={playSend}
       />
     </View>
   );
