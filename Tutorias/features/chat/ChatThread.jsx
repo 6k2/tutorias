@@ -235,21 +235,30 @@ function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor
         styles.bubbleOther,
         { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` },
       ];
-  const displayTextColor = isOwnMessage ? '#fff' : textColor;
+  const bubbleTextColor = isOwnMessage
+    ? isColorLight(tintColor)
+      ? '#111115'
+      : '#fff'
+    : textColor;
+  const timestampColor = isOwnMessage
+    ? isColorLight(tintColor)
+      ? '#11111599'
+      : '#ffffffcc'
+    : mutedColor;
 
   return (
     <View style={[styles.messageRow, alignStyle]}>
       <View style={bubbleStyle}>
         {message.text ? (
-          <Text style={[styles.messageText, { color: displayTextColor }]}>{message.text}</Text>
+          <Text style={[styles.messageText, { color: bubbleTextColor }]}>{message.text}</Text>
         ) : null}
         {message.attachmentURL ? (
-          <Text style={[styles.attachmentText, { color: displayTextColor }]}>Archivo adjunto</Text>
+          <Text style={[styles.attachmentText, { color: bubbleTextColor }]}>Archivo adjunto</Text>
         ) : null}
         {message.pending && (
-          <Text style={[styles.pendingText, { color: displayTextColor }]}>Pendiente...</Text>
+          <Text style={[styles.pendingText, { color: bubbleTextColor }]}>Pendiente...</Text>
         )}
-        <Text style={[styles.timestamp, { color: isOwnMessage ? '#ffffffcc' : mutedColor }]}>
+        <Text style={[styles.timestamp, { color: timestampColor }]}>
           {formatTimestamp(message.createdAt)}
         </Text>
       </View>
@@ -283,6 +292,27 @@ function formatLastSeen(lastSeen) {
   if (!lastSeen) return 'Fuera de linea';
   const date = new Date(lastSeen);
   return `Visto ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function isColorLight(color) {
+  if (!color) return false;
+  const sanitized = String(color).trim().replace('#', '');
+  if (sanitized.length !== 3 && sanitized.length !== 6) {
+    return false;
+  }
+  const normalized =
+    sanitized.length === 3
+      ? sanitized
+          .split('')
+          .map((char) => `${char}${char}`)
+          .join('')
+      : sanitized;
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some(Number.isNaN)) return false;
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness >= 186;
 }
 
 const styles = StyleSheet.create({
