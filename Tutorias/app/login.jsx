@@ -14,7 +14,6 @@ import { useTopAlert } from "../components/TopAlert";
 import { auth } from "./config/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { MaterialIcons } from "@expo/vector-icons";
-import { Colors } from "../constants/Colors";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -128,14 +127,6 @@ export default function LoginScreen() {
           Sign up here
         </Text>
       </Text>
-
-      <TouchableOpacity
-        style={styles.forgotBtn}
-        onPress={() => router.push('/forgot-password')}
-        accessibilityRole="button"
-      >
-        <Text style={styles.forgotText}>Olvidé mi contraseña</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -192,21 +183,8 @@ const styles = StyleSheet.create({
     color: "#aaa",
   },
   loginLink: {
-    color: Colors.light.tint,
+    color: "#FF8E53",
     fontWeight: "bold",
-  },
-  forgotBtn: {
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.light.tint,
-    backgroundColor: 'transparent',
-  },
-  forgotText: {
-    color: Colors.light.tint,
-    fontWeight: '600',
   },
   errorBox: {
     flexDirection: 'row',
