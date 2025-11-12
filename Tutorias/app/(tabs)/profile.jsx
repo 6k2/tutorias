@@ -31,12 +31,15 @@ import { useMaterialsByReservation } from '../../features/materials/hooks/useMat
 import { useOfflineMaterial } from '../../features/materials/hooks/useOfflineMaterial';
 import { toMillis } from '../../features/materials/utils/dates';
 
+const TAB_BAR_OVERLAY = 110;
+
 export default function ProfileScreen() {
   const router = useRouter();
   // Redirects to login if not authenticated (gentle nudge, xd)
   const { user, ready } = useAuthGuard({ dest: 'Perfil', delayMs: 400 });
   const topAlert = useTopAlert();
   const insets = useSafeAreaInsets();
+  const bottomSpacing = (insets?.bottom ?? 0) + TAB_BAR_OVERLAY;
   const [loading, setLoading] = useState(true);
   const [photoURL, setPhotoURL] = useState('');
   const [description, setDescription] = useState('');
@@ -222,7 +225,13 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: '#1B1E36' }}
-      contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 12 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        padding: 16,
+        paddingTop: (insets?.top ?? 0) + 12,
+        paddingBottom: bottomSpacing,
+      }}
+      keyboardShouldPersistTaps="handled"
     >
       {/* Header + AGENDA */}
       <View style={styles.headerRow}>

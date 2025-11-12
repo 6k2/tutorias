@@ -12,10 +12,14 @@ import { persistMessage } from '../../features/chat/utils/persistMessage';
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const TAB_BAR_OVERLAY = 110;
 
 export default function ChatsScreen() {
   const currentUser = useAuthUser();
   const connectivity = useConnectivity();
+  const insets = useSafeAreaInsets();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [pendingMessages, setPendingMessages] = useState({});
@@ -28,6 +32,8 @@ export default function ChatsScreen() {
 
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
+  const background = useThemeColor({}, 'background');
+  const bottomOffset = (insets.bottom ?? 0) + TAB_BAR_OVERLAY;
 
   useEffect(() => {
     let alive = true;
@@ -204,7 +210,16 @@ export default function ChatsScreen() {
   const materialsBadgeCount = isStudent ? materialsInbox.newCount || 0 : 0;
 
   return (
-    <View style={styles.root}>
+    <View
+      style={[
+        styles.root,
+        {
+          backgroundColor: background,
+          paddingBottom: bottomOffset,
+          paddingTop: insets.top ?? 0,
+        },
+      ]}
+    >
       <Modal visible={!!createModalVisible} animationType="slide" transparent>
         <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
           <View style={{ backgroundColor: '#101225', padding: 16, borderRadius: 12 }}>
@@ -271,6 +286,7 @@ export default function ChatsScreen() {
             metaByKey={enrollments.metaByKey}
             loadingEnrollments={enrollments.loading}
             onCreateConversation={() => setCreateModalVisible(true)}
+            bottomOffset={bottomOffset}
           />
         }
         thread={
@@ -280,6 +296,7 @@ export default function ChatsScreen() {
             partner={threadProps.partner}
             pendingMessages={pendingForActive}
             onQueueMessage={registerPendingMessage}
+            bottomInset={bottomOffset}
           />
         }
         isThreadOpen={Boolean(selectedConversation)}
@@ -296,7 +313,6 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#101225',
   },
   centered: {
     flex: 1,

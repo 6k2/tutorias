@@ -32,6 +32,7 @@ export function ChatThread({
   partner,
   pendingMessages = [],
   onQueueMessage,
+  bottomInset = 0,
 }) {
   const conversationId = conversation?.id;
   const [messages, setMessages] = useState([]);
@@ -48,6 +49,8 @@ export function ChatThread({
   const tintColor = useThemeColor({}, 'tint');
   const mutedColor = useThemeColor({}, 'icon');
   const borderColor = `${mutedColor}40`;
+  const safeBottomInset = Math.max(0, bottomInset);
+  const listBottomPadding = safeBottomInset + 120;
 
   useEffect(() => {
     setMessages([]);
@@ -153,7 +156,9 @@ export function ChatThread({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: background }]}>
+    <View
+      style={[styles.container, { backgroundColor: background, paddingBottom: safeBottomInset }]}
+    >
       <View style={[styles.header, { borderBottomColor: borderColor }]}>
         <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}>
           {partner?.photoURL ? (
@@ -190,7 +195,7 @@ export function ChatThread({
         )}
         keyExtractor={(item) => item.id}
         inverted
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
         onEndReachedThreshold={0.2}
         onEndReached={loadOlder}
         ListFooterComponent={
@@ -325,7 +330,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: 96,
   },
   messageRow: {
     marginBottom: 10,

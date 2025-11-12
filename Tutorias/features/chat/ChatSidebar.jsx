@@ -20,6 +20,7 @@ export function ChatSidebar({
   metaByKey,
   loadingEnrollments,
   onCreateConversation,
+  bottomOffset = 0,
 }) {
   const [search, setSearch] = useState('');
   const { items, loading, fromCache } = useUserConversations(currentUid, {
@@ -48,6 +49,9 @@ export function ChatSidebar({
     ? 'Verificando matriculas...'
     : 'No hay conversaciones disponibles.';
 
+  const safeBottomOffset = Math.max(0, bottomOffset);
+  const scrollPaddingBottom = safeBottomOffset + 32;
+
   return (
     <View style={[styles.container, { backgroundColor: background }]}>
       <View style={[styles.searchContainer, { borderColor: `${borderColor}40` }]}>
@@ -71,7 +75,7 @@ export function ChatSidebar({
           )}
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}>
         {filteredItems.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={[styles.emptyText, { color: borderColor }]}>{emptyCopy}</Text>
@@ -230,7 +234,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingTop: 8,
   },
   emptyState: {
     padding: 24,
