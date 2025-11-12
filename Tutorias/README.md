@@ -31,3 +31,8 @@ App sencilla para reservar clases y gestionar perfil. Tiene inicio con materias,
 6. `npx expo start`
 
 Firebase está configurado en `app/config/firebase.js`. Si quieres usar otro proyecto, cambia esas keys.
+
+## Testing
+- The suite keeps the existing Firebase integration in `features/materials/utils/__tests__/firebase.integration.test.js`; it creates a real Auth user, writes a profile document, and reads a matrícula entry against the live Firebase project (`app/config/firebase.js`). Run it with `npm test -- features/materials/utils/__tests__/firebase.integration.test.js`.
+- The unit test `features/materials/utils/__tests__/unit/createTeacherProfile.unit.test.js` drives `buildTeacherProfile` (trims strings, drops empty subjects, ensures `createdAt`, throws on missing fields); run `npm test -- -t "@unit"`.
+- Performance captures remain in `features/materials/utils/__tests__/perf/offlineIndex.perf.test.js` and time the offline-index helpers without touching Firebase. Run `npm test -- -t "@perf" -- --runInBand` (our `test` script already adds `--runInBand`, so the extra `--runInBand` simply reinforces the serial execution).

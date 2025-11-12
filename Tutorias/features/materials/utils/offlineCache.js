@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { getDownloadURL, getStorage, ref as storageRef } from 'firebase/storage';
 import { app } from '../../../app/config/firebase';
@@ -40,20 +39,56 @@ const sanitizeFileName = (candidate, fallback) => {
   return base || 'material';
 };
 
+const createFallbackStorage = () => {
+  const store = new Map();
+  return {
+    getItem: async (key) => (store.has(key) ? store.get(key) : null),
+    setItem: async (key, value) => store.set(key, value),
+    removeItem: async (key) => store.delete(key),
+    clear: async () => store.clear(),
+  };
+};
+
+let cachedAsyncStorage = null;
+
+const getAsyncStorage = () => {
+  if (cachedAsyncStorage) {
+    return cachedAsyncStorage;
+  }
+  try {
+    // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+    const module = require('@react-native-async-storage/async-storage');
+    cachedAsyncStorage = module?.default ?? module;
+  } catch (_error) {
+    cachedAsyncStorage = createFallbackStorage();
+  }
+  return cachedAsyncStorage;
+};
+
+const getStorageClient = () => {
+  const storage = getAsyncStorage();
+  if (!storage) return null;
+  return storage;
+};
+
 export const readOfflineIndex = async (uid) => {
   if (!uid) return {};
-  const raw = await AsyncStorage.getItem(indexKey(uid));
+  const storage = getStorageClient();
+  if (!storage || typeof storage.getItem !== 'function') return {};
+  const raw = await storage.getItem(indexKey(uid));
   return safeJsonParse(raw);
 };
 
 export const writeOfflineIndex = async (uid, map) => {
   if (!uid) return;
+  const storage = getStorageClient();
+  if (!storage) return;
   const key = indexKey(uid);
   if (!map || !Object.keys(map).length) {
-    await AsyncStorage.removeItem(key);
+    await storage.removeItem(key);
     return;
   }
-  await AsyncStorage.setItem(key, JSON.stringify(map));
+  await storage.setItem(key, JSON.stringify(map));
 };
 
 export const getOfflineEntry = async (uid, materialId) => {
