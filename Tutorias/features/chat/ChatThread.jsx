@@ -24,7 +24,6 @@ import { db } from '../../app/config/firebase';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { usePresence, subscribeTyping } from './hooks/usePresence';
 import { MessageInput } from './MessageInput';
-import { useChatSounds } from './hooks/useChatSounds';
 
 const PAGE_SIZE = 20;
 
@@ -49,7 +48,6 @@ export function ChatThread({
   const listInitializedRef = useRef(false);
 
   const presence = usePresence(partner?.uid);
-  const { playSend, playReceive } = useChatSounds();
   const subjectName =
     conversation?.enrollmentMeta?.subjectName ||
     conversation?.subjectName ||
@@ -230,10 +228,7 @@ export function ChatThread({
       return;
     }
     lastMessageIdRef.current = latest.id;
-    if (!latest.pending && latest.from && latest.from !== currentUser?.uid) {
-      playReceive();
-    }
-  }, [combinedMessages, currentUser?.uid, playReceive]);
+  }, [combinedMessages, currentUser?.uid]);
 
   if (!conversationId) {
     return (
