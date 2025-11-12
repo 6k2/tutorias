@@ -1,0 +1,25 @@
+{
+  "name": "tutorias-htpps-functions",
+  "version": "1.0.0",
+  "description": "Firebase HTTPS functions for Tutorias",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf lib"
+  },
+  "engines": {
+    "node": "18"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "firebase-functions": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^18.19.0",
+    "rimraf": "^5.0.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
