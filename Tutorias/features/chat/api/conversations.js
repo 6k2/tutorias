@@ -1,4 +1,15 @@
-import { addDoc, collection, doc, getDocs, limit, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 
 const REQUIRED_FIELDS = {
@@ -24,6 +35,31 @@ const sanitizeProfile = (user = {}, conversationId, meta) => ({
   subjectName: meta?.subjectName || null,
 });
 
+const normalizeParticipantUids = (uids = []) => {
+  const unique = Array.from(new Set(uids.filter(Boolean)));
+  return unique.sort();
+};
+
+const locateConversationRef = async (conversationKey) => {
+  const conversationsCol = collection(db, 'conversations');
+  const canonicalRef = doc(conversationsCol, conversationKey);
+  const canonicalSnapshot = await getDoc(canonicalRef);
+
+  if (canonicalSnapshot.exists()) {
+    return { ref: canonicalRef, snapshot: canonicalSnapshot };
+  }
+
+  const existingSnapshot = await getDocs(
+    query(conversationsCol, where('conversationKey', '==', conversationKey), limit(1))
+  );
+
+  if (!existingSnapshot.empty) {
+    return { ref: existingSnapshot.docs[0].ref, snapshot: existingSnapshot.docs[0] };
+  }
+
+  return { ref: canonicalRef, snapshot: null };
+};
+
 /**
  * Ensure a conversation document exists for two users and create participants entries.
  * Returns the conversation ref (DocumentReference) or null.
@@ -41,20 +77,15 @@ export const ensureConversationRecord = async ({ myUser, otherUser, meta }) => {
   }
 
   const sorted = [myUid, otherUid].sort();
-  const conversationsCol = collection(db, 'conversations');
-  const existingQuery = query(
-    conversationsCol,
-    where('conversationKey', '==', conversationKey),
-    limit(1)
-  );
-  const existingSnapshot = await getDocs(existingQuery);
+  const normalizedParticipants = normalizeParticipantUids(sorted);
+  const timestamp = serverTimestamp();
 
-  let conversationRef;
-  if (existingSnapshot.empty) {
-    const timestamp = serverTimestamp();
-    conversationRef = await addDoc(conversationsCol, {
+  const { ref: conversationRef, snapshot } = await locateConversationRef(conversationKey);
+
+  if (!snapshot) {
+    await setDoc(conversationRef, {
       conversationKey,
-      participantUids: sorted,
+      participantUids: normalizedParticipants,
       createdAt: timestamp,
       updatedAt: timestamp,
       ...REQUIRED_FIELDS,
@@ -63,11 +94,11 @@ export const ensureConversationRecord = async ({ myUser, otherUser, meta }) => {
       reservationId: meta?.id || null,
     });
   } else {
-    conversationRef = existingSnapshot.docs[0].ref;
-    const data = existingSnapshot.docs[0].data() || {};
+    const data = snapshot.data() || {};
     const updates = {};
-    if (!Array.isArray(data.participantUids) || data.participantUids.length !== 2) {
-      updates.participantUids = sorted;
+    const existingParticipants = normalizeParticipantUids(data.participantUids || []);
+    if (existingParticipants.join(',') !== normalizedParticipants.join(',')) {
+      updates.participantUids = normalizedParticipants;
     }
     Object.entries(REQUIRED_FIELDS).forEach(([key, defaultValue]) => {
       if (!(key in data)) {
@@ -80,6 +111,7 @@ export const ensureConversationRecord = async ({ myUser, otherUser, meta }) => {
       updates.reservationId = meta.id || null;
     }
     if (Object.keys(updates).length > 0) {
+      updates.updatedAt = timestamp;
       await updateDoc(conversationRef, updates);
     }
   }

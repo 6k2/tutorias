@@ -1,27 +1,42 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { ensureConversationRecord } from '../../features/chat/api/conversations';
 import { ChatLayout } from '../../features/chat/ChatLayout';
 import { ChatSidebar } from '../../features/chat/ChatSidebar';
 import { ChatThread } from '../../features/chat/ChatThread';
 import { useAuthUser } from '../../features/chat/hooks/useAuthUser';
 import { useChatEnrollments } from '../../features/chat/hooks/useChatEnrollments';
+import { useUserConversations } from '../../features/chat/hooks/useConversation';
 import { useSelfPresence } from '../../features/chat/hooks/usePresence';
 import { persistMessage } from '../../features/chat/utils/persistMessage';
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const TAB_BAR_OVERLAY = 110;
+const TAB_BAR_SAFE_PADDING = 72;
+const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? 'padding' : undefined;
 
 export default function ChatsScreen() {
   const currentUser = useAuthUser();
   const connectivity = useConnectivity();
   const insets = useSafeAreaInsets();
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [selectedPartner, setSelectedPartner] = useState(null);
+  const { width } = useWindowDimensions();
+  const autoSelectOnLoad = width >= 768;
+  const selectionBootedRef = useRef(false);
+  const [activeConversationId, setActiveConversationId] = useState(null);
   const [pendingMessages, setPendingMessages] = useState({});
   const [bootReady, setBootReady] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -33,7 +48,7 @@ export default function ChatsScreen() {
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
   const background = useThemeColor({}, 'background');
-  const bottomOffset = (insets.bottom ?? 0) + TAB_BAR_OVERLAY;
+  const contentBottomInset = (insets.bottom ?? 0) + TAB_BAR_SAFE_PADDING;
 
   useEffect(() => {
     let alive = true;
@@ -48,6 +63,14 @@ export default function ChatsScreen() {
   }, []);
 
   const enrollments = useChatEnrollments(currentUser);
+  const {
+    items: conversationItems,
+    loading: conversationsLoading,
+    fromCache: conversationsFromCache,
+  } = useUserConversations(currentUser?.uid, {
+    allowedKeys: enrollments.allowedKeys,
+    metaByKey: enrollments.metaByKey,
+  });
   const isStudent = String(currentUser?.role || '').toLowerCase() === 'student';
   const materialsInbox = useMaterialsInbox(isStudent ? currentUser?.uid : null, {
     disabled: !isStudent,
@@ -58,6 +81,29 @@ export default function ChatsScreen() {
       setPendingMessages({});
     }
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const exists = conversationItems.some((item) => item.id === activeConversationId);
+    if (!exists) {
+      setActiveConversationId(null);
+    }
+  }, [activeConversationId, conversationItems]);
+
+  useEffect(() => {
+    if (!autoSelectOnLoad) {
+      selectionBootedRef.current = false;
+      return;
+    }
+    if (selectionBootedRef.current || activeConversationId) {
+      selectionBootedRef.current = true;
+      return;
+    }
+    if (conversationItems.length > 0) {
+      setActiveConversationId(conversationItems[0].id);
+      selectionBootedRef.current = true;
+    }
+  }, [autoSelectOnLoad, conversationItems, activeConversationId]);
 
   const registerPendingMessage = useCallback((entry, payload) => {
     if (!payload?.conversationId || !payload?.clientId) return;
@@ -166,25 +212,31 @@ export default function ChatsScreen() {
     [currentUser?.uid]
   );
 
-  const ensuredSelectedPartner = useMemo(() => {
-    if (!selectedConversation) return null;
-    return ensurePartnerProfile(selectedConversation, selectedPartner);
-  }, [ensurePartnerProfile, selectedConversation, selectedPartner]);
+  const activeConversation = useMemo(
+    () => conversationItems.find((conversation) => conversation.id === activeConversationId) || null,
+    [conversationItems, activeConversationId]
+  );
+
+  const activePartner = useMemo(() => {
+    if (!activeConversation) return null;
+    return ensurePartnerProfile(activeConversation, null);
+  }, [activeConversation, ensurePartnerProfile]);
 
   const threadProps = useMemo(() => {
-    if (!selectedConversation) return { conversation: null, partner: null };
+    if (!activeConversation) return { conversation: null, partner: null };
     return {
-      conversation: selectedConversation,
-      partner: ensuredSelectedPartner,
+      conversation: activeConversation,
+      partner: activePartner,
     };
-  }, [selectedConversation, ensuredSelectedPartner]);
+  }, [activeConversation, activePartner]);
 
   const handleSelectConversation = useCallback(
-    (conversation, partner) => {
-      setSelectedConversation(conversation);
-      setSelectedPartner(ensurePartnerProfile(conversation, partner));
+    (conversation) => {
+      if (!conversation?.id) return;
+      selectionBootedRef.current = true;
+      setActiveConversationId(conversation.id);
     },
-    [ensurePartnerProfile]
+    []
   );
 
   if (!bootReady || currentUser === undefined) {
@@ -203,53 +255,47 @@ export default function ChatsScreen() {
     );
   }
 
-  const pendingForActive = selectedConversation?.id
-    ? pendingMessages[selectedConversation.id] || []
-    : [];
+  const pendingForActive = activeConversationId ? pendingMessages[activeConversationId] || [] : [];
 
   const materialsBadgeCount = isStudent ? materialsInbox.newCount || 0 : 0;
 
   return (
-    <View
-      style={[
-        styles.root,
-        {
-          backgroundColor: background,
-          paddingBottom: bottomOffset,
-          paddingTop: insets.top ?? 0,
-        },
-      ]}
-    >
+    <>
       <Modal visible={!!createModalVisible} animationType="slide" transparent>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-          <View style={{ backgroundColor: '#101225', padding: 16, borderRadius: 12 }}>
-            <Text style={{ color: textColor, fontWeight: '700', marginBottom: 8 }}>Crear conversación</Text>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: background }]}>
+            <Text style={[styles.modalTitle, { color: textColor }]}>Crear conversacion</Text>
             <TextInput
               placeholder="UID del destinatario"
-              placeholderTextColor="#888"
+              placeholderTextColor={`${textColor}66`}
               value={createUid}
               onChangeText={setCreateUid}
-              style={{ borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 8, color: textColor, marginBottom: 8 }}
+              style={[styles.modalInput, { borderColor: `${textColor}22`, color: textColor }]}
             />
             <TextInput
               placeholder="Nombre (opcional)"
-              placeholderTextColor="#888"
+              placeholderTextColor={`${textColor}66`}
               value={createName}
               onChangeText={setCreateName}
-              style={{ borderWidth: 1, borderColor: '#333', padding: 8, borderRadius: 8, color: textColor, marginBottom: 12 }}
+              style={[styles.modalInput, { borderColor: `${textColor}22`, color: textColor }]}
             />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-              <Pressable onPress={() => setCreateModalVisible(false)} style={{ padding: 8 }}>
-                <Text style={{ color: '#999' }}>Cancelar</Text>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setCreateModalVisible(false)} style={styles.modalAction}>
+                <Text style={{ color: `${textColor}80` }}>Cancelar</Text>
               </Pressable>
               <Pressable
                 onPress={async () => {
                   if (!createUid) return;
                   const other = { uid: createUid, displayName: createName || 'Sin nombre' };
                   try {
-                    const ref = await ensureConversationRecord({ myUser: currentUser, otherUser: other, meta: null });
+                    const ref = await ensureConversationRecord({
+                      myUser: currentUser,
+                      otherUser: other,
+                      meta: null,
+                    });
                     if (ref) {
-                      setSelectedConversation({ id: ref.id, participants: [{ uid: currentUser.uid, displayName: currentUser.displayName || 'Sin nombre' }, other] });
+                      selectionBootedRef.current = true;
+                      setActiveConversationId(ref.id);
                     }
                   } catch (e) {
                     console.error('failed create conversation', e);
@@ -258,7 +304,7 @@ export default function ChatsScreen() {
                   setCreateUid('');
                   setCreateName('');
                 }}
-                style={{ padding: 8 }}
+                style={styles.modalAction}
               >
                 <Text style={{ color: tintColor, fontWeight: '700' }}>Crear</Text>
               </Pressable>
@@ -266,52 +312,60 @@ export default function ChatsScreen() {
           </View>
         </View>
       </Modal>
-      {isStudent && materialsBadgeCount > 0 && (
-        <View style={styles.materialsBanner}>
-          <MaterialIcons name="cloud-download" size={18} color="#1B1E36" />
-          <Text style={styles.materialsBannerText}>
-            {materialsBadgeCount === 1
-              ? 'Nuevo material de estudio'
-              : `${materialsBadgeCount} materiales nuevos`}
-          </Text>
-        </View>
-      )}
-      <ChatLayout
-        sidebar={
-          <ChatSidebar
-            currentUid={currentUser.uid}
-            onSelectConversation={handleSelectConversation}
-            activeConversationId={selectedConversation?.id || null}
-            allowedKeys={enrollments.allowedKeys}
-            metaByKey={enrollments.metaByKey}
-            loadingEnrollments={enrollments.loading}
-            onCreateConversation={() => setCreateModalVisible(true)}
-            bottomOffset={bottomOffset}
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: background }]} edges={['top']}>
+        {isStudent && materialsBadgeCount > 0 && (
+          <View style={styles.materialsBanner}>
+            <MaterialIcons name="cloud-download" size={18} color="#1B1E36" />
+            <Text style={styles.materialsBannerText}>
+              {materialsBadgeCount === 1
+                ? 'Nuevo material de estudio'
+                : `${materialsBadgeCount} materiales nuevos`}
+            </Text>
+          </View>
+        )}
+        <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
+          <ChatLayout
+            sidebar={
+              <ChatSidebar
+                currentUid={currentUser.uid}
+                conversations={conversationItems}
+                loadingConversations={conversationsLoading}
+                fromCache={conversationsFromCache}
+                onSelectConversation={handleSelectConversation}
+                activeConversationId={activeConversationId}
+                loadingEnrollments={enrollments.loading}
+                onCreateConversation={() => setCreateModalVisible(true)}
+                bottomOffset={contentBottomInset}
+              />
+            }
+            thread={
+              <ChatThread
+                conversation={threadProps.conversation}
+                currentUser={currentUser}
+                partner={threadProps.partner}
+                pendingMessages={pendingForActive}
+                onQueueMessage={registerPendingMessage}
+                bottomInset={contentBottomInset}
+              />
+            }
+            isThreadOpen={Boolean(activeConversation)}
+            onBack={() => {
+              selectionBootedRef.current = false;
+              setActiveConversationId(null);
+            }}
+            offline={connectivity.isOffline}
           />
-        }
-        thread={
-          <ChatThread
-            conversation={threadProps.conversation}
-            currentUser={currentUser}
-            partner={threadProps.partner}
-            pendingMessages={pendingForActive}
-            onQueueMessage={registerPendingMessage}
-            bottomInset={bottomOffset}
-          />
-        }
-        isThreadOpen={Boolean(selectedConversation)}
-        onBack={() => {
-          setSelectedConversation(null);
-          setSelectedPartner(null);
-        }}
-        offline={connectivity.isOffline}
-      />
-    </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  safeArea: {
+    flex: 1,
+  },
+  flex: {
     flex: 1,
   },
   centered: {
@@ -335,5 +389,37 @@ const styles = StyleSheet.create({
     color: '#1B1E36',
     fontWeight: '700',
     flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: '#00000055',
+  },
+  modalCard: {
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    marginTop: 8,
+  },
+  modalAction: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
 });

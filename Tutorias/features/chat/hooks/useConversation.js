@@ -44,6 +44,33 @@ const fetchParticipants = async (conversationRef) => {
   }));
 };
 
+const timestampValue = (value) => {
+  if (!value) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (value?.seconds) return value.seconds * 1000;
+  return 0;
+};
+
+const conversationSortValue = (conversation) => {
+  if (!conversation) return 0;
+  return (
+    timestampValue(conversation.lastMessageAt) ||
+    timestampValue(conversation.updatedAt) ||
+    timestampValue(conversation.createdAt)
+  );
+};
+
+const shouldPreferCandidate = (existing, candidate) => {
+  if (!existing) return true;
+  const candidateValue = conversationSortValue(candidate);
+  const existingValue = conversationSortValue(existing);
+  if (candidateValue !== existingValue) {
+    return candidateValue > existingValue;
+  }
+  return String(candidate?.id || '').localeCompare(String(existing?.id || '')) < 0;
+};
+
 
 
 export function useConversation(myUser, otherUser, options = {}) {
@@ -148,6 +175,9 @@ export function useUserConversations(uid, options = {}) {
   const [fromCache, setFromCache] = useState(false);
   const conversationWatchers = useRef(new Map());
   const conversationKeysById = useRef(new Map());
+  const conversationIdByKey = useRef(new Map());
+  const conversationsStore = useRef(new Map());
+  const participantsCache = useRef(new Map());
 
   const isConversationAllowed = useCallback(
     (data) => {
@@ -166,13 +196,26 @@ export function useUserConversations(uid, options = {}) {
   );
 
   const dropConversation = useCallback((conversationId) => {
-    setItems((prev) => prev.filter((item) => item.id !== conversationId));
     const unsubscribe = conversationWatchers.current.get(conversationId);
     if (unsubscribe) {
       unsubscribe();
     }
     conversationWatchers.current.delete(conversationId);
+    const key = conversationKeysById.current.get(conversationId);
+    if (key) {
+      conversationIdByKey.current.delete(key);
+    }
     conversationKeysById.current.delete(conversationId);
+    participantsCache.current.delete(conversationId);
+    conversationsStore.current.delete(conversationId);
+    setItems(() => {
+      if (!conversationsStore.current.size) {
+        return [];
+      }
+      const next = Array.from(conversationsStore.current.values());
+      next.sort((a, b) => conversationSortValue(b) - conversationSortValue(a));
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -183,6 +226,9 @@ export function useUserConversations(uid, options = {}) {
       conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
       conversationWatchers.current.clear();
       conversationKeysById.current.clear();
+      conversationIdByKey.current.clear();
+      conversationsStore.current.clear();
+      participantsCache.current.clear();
       return () => {};
     }
 
@@ -236,11 +282,15 @@ export function useUserConversations(uid, options = {}) {
                 return;
               }
 
-              let participants = [];
-              try {
-                participants = await fetchParticipants(conversationRef);
-              } catch (error) {
-                console.error('chat: failed to load participants', error);
+              let participants = participantsCache.current.get(conversationId);
+              if (!participants) {
+                try {
+                  participants = await fetchParticipants(conversationRef);
+                  participantsCache.current.set(conversationId, participants);
+                } catch (error) {
+                  console.error('chat: failed to load participants', error);
+                  participants = [];
+                }
               }
 
               const enrollmentMeta = enrollmentForKey(data.conversationKey);
@@ -251,21 +301,23 @@ export function useUserConversations(uid, options = {}) {
                 enrollmentMeta,
               };
 
-              setItems((prev) => {
-                const filtered = prev.filter((item) => item.id !== conversationDoc.id);
-                const merged = [...filtered, nextItem];
-                merged.sort((a, b) => {
-                  const timeA =
-                    a.lastMessageAt?.toMillis?.() ||
-                    a.updatedAt?.toMillis?.() ||
-                    0;
-                  const timeB =
-                    b.lastMessageAt?.toMillis?.() ||
-                    b.updatedAt?.toMillis?.() ||
-                    0;
-                  return timeB - timeA;
-                });
-                return merged;
+              const existingIdForKey = conversationIdByKey.current.get(data.conversationKey);
+              if (existingIdForKey && existingIdForKey !== conversationId) {
+                const existingItem = conversationsStore.current.get(existingIdForKey);
+                if (existingItem && shouldPreferCandidate(existingItem, nextItem)) {
+                  dropConversation(existingIdForKey);
+                } else {
+                  dropConversation(conversationId);
+                  return;
+                }
+              }
+
+              conversationIdByKey.current.set(data.conversationKey, conversationId);
+              conversationsStore.current.set(conversationId, nextItem);
+              setItems(() => {
+                const ordered = Array.from(conversationsStore.current.values());
+                ordered.sort((a, b) => conversationSortValue(b) - conversationSortValue(a));
+                return ordered;
               });
               setLoading(false);
             },

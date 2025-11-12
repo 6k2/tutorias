@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -14,7 +15,7 @@ import { useThemeColor } from '../../hooks/useThemeColor';
 import { enqueueSyncAction, useConnectivity } from '../../tools/offline';
 import { persistMessage } from './utils/persistMessage';
 
-export function MessageInput({ conversationId, currentUser, partner, onQueueMessage }) {
+export function MessageInput({ conversationId, currentUser, partner, onQueueMessage, onSendFeedback }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState(null);
   const [isSending, setIsSending] = useState(false);
@@ -26,6 +27,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
   const textColor = useThemeColor({}, 'text');
   const borderColor = useThemeColor({}, 'icon');
   const tintColor = useThemeColor({}, 'tint');
+  const composerBackground = useThemeColor({ light: '#f5f6fa', dark: '#1c1f2c' }, 'background');
 
   const draftKey =
     currentUser?.uid && conversationId
@@ -174,6 +176,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
         };
         const entry = await enqueueSyncAction('chat:sendMessage', payload);
         onQueueMessage?.(entry, payload);
+        onSendFeedback?.();
         resetComposer();
         return;
       }
@@ -192,6 +195,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
         attachmentURL: attachmentPayload.url,
         attachmentType: attachmentPayload.type,
       });
+      onSendFeedback?.();
       resetComposer();
     } catch (sendError) {
       console.error('Error al enviar mensaje', sendError);
@@ -241,17 +245,17 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
           style={[styles.iconButton, { borderColor: `${borderColor}55` }]}
           disabled={connectivity.isOffline}
         >
-          <Text
-            style={[
-              styles.iconButtonText,
-              { color: connectivity.isOffline ? `${tintColor}66` : tintColor },
-            ]}
-          >
-            +
-          </Text>
+          <MaterialIcons
+            name="attach-file"
+            size={20}
+            color={connectivity.isOffline ? `${tintColor}66` : tintColor}
+          />
         </Pressable>
         <TextInput
-          style={[styles.input, { color: textColor, borderColor: `${borderColor}55` }]}
+          style={[
+            styles.input,
+            { color: textColor, borderColor: `${borderColor}22`, backgroundColor: composerBackground },
+          ]}
           placeholder="Escribe un mensaje"
           placeholderTextColor={`${borderColor}aa`}
           value={text}
@@ -269,7 +273,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
             },
           ]}
         >
-          <Text style={styles.sendButtonText}>Enviar</Text>
+          <MaterialIcons name="send" size={20} color="#fff" />
         </Pressable>
       </View>
       {error ? <Text style={[styles.errorText, { color: tintColor }]}>{error}</Text> : null}
@@ -306,10 +310,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  iconButtonText: {
-    fontSize: 20,
-    fontWeight: '600',
   },
   input: {
     flex: 1,

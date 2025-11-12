@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getDatabase,
   onDisconnect,
@@ -26,12 +26,27 @@ const isPresenceValid = (payload) => {
 
 export function usePresence(uid) {
   const [presence, setPresence] = useState({ online: false, lastSeen: null });
+  const timeoutRef = useRef(null);
+
+  const clearTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => () => clearTimer(), []);
 
   useEffect(() => {
-    if (!uid) return undefined;
+    if (!uid) {
+      clearTimer();
+      setPresence({ online: false, lastSeen: null });
+      return () => {};
+    }
     const statusRef = databaseRef(realtimeDb, `status/${uid}`);
     const unsubscribe = onValue(statusRef, (snapshot) => {
       const value = snapshot.val();
+      clearTimer();
       if (!value || !isPresenceValid(value)) {
         setPresence({ online: false, lastSeen: value?.lastSeen || null });
         return;
@@ -40,8 +55,20 @@ export function usePresence(uid) {
         online: true,
         lastSeen: typeof value.lastSeen === 'number' ? value.lastSeen : null,
       });
+      if (typeof value.expiresAt === 'number') {
+        const delay = Math.max(0, value.expiresAt - now());
+        timeoutRef.current = setTimeout(() => {
+          setPresence({
+            online: false,
+            lastSeen: typeof value.lastSeen === 'number' ? value.lastSeen : now(),
+          });
+        }, delay + 20);
+      }
     });
-    return unsubscribe;
+    return () => {
+      clearTimer();
+      unsubscribe();
+    };
   }, [uid]);
 
   return presence;

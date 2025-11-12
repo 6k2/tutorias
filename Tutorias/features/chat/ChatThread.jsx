@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -23,6 +24,7 @@ import { db } from '../../app/config/firebase';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { usePresence, subscribeTyping } from './hooks/usePresence';
 import { MessageInput } from './MessageInput';
+import { useChatSounds } from './hooks/useChatSounds';
 
 const PAGE_SIZE = 20;
 
@@ -41,8 +43,18 @@ export function ChatThread({
   const [reachedEnd, setReachedEnd] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const listRef = useRef(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const lastMessageIdRef = useRef(null);
+  const listInitializedRef = useRef(false);
 
   const presence = usePresence(partner?.uid);
+  const { playSend, playReceive } = useChatSounds();
+  const subjectName =
+    conversation?.enrollmentMeta?.subjectName ||
+    conversation?.subjectName ||
+    partner?.subjectName ||
+    null;
 
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -56,6 +68,12 @@ export function ChatThread({
     setMessages([]);
     setCursor(null);
     setReachedEnd(false);
+  }, [conversationId]);
+
+  useEffect(() => {
+    setIsNearBottom(true);
+    listInitializedRef.current = false;
+    lastMessageIdRef.current = null;
   }, [conversationId]);
 
   useEffect(() => {
@@ -74,6 +92,7 @@ export function ChatThread({
         }));
         setMessages(docs.reverse());
         setCursor(snapshot.docs[snapshot.docs.length - 1] || null);
+        setReachedEnd(snapshot.size < PAGE_SIZE);
         setLoading(false);
       },
       (error) => {
@@ -127,6 +146,27 @@ export function ChatThread({
     }
   }, [conversationId, cursor, reachedEnd, loadingOlder]);
 
+  const handleScroll = useCallback(
+    ({ nativeEvent }) => {
+      const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      setIsNearBottom(distanceFromBottom < 80);
+      if (contentOffset.y <= 24 && !loadingOlder && !reachedEnd) {
+        loadOlder();
+      }
+    },
+    [loadOlder, loadingOlder, reachedEnd]
+  );
+
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (listRef.current) {
+        listRef.current.scrollToEnd({ animated: true });
+      }
+    });
+  }, []);
+
   const normalizedPending = useMemo(() => {
     if (!pendingMessages || pendingMessages.length === 0) return [];
     return pendingMessages.map((pending) => ({
@@ -144,6 +184,56 @@ export function ChatThread({
     merged.sort((a, b) => getMillis(a) - getMillis(b));
     return merged;
   }, [messages, normalizedPending]);
+
+  const historyComponent = useMemo(() => {
+    if (!conversationId || (!messages.length && !loadingOlder)) {
+      return null;
+    }
+    if (loadingOlder) {
+      return (
+        <View style={styles.historyLoader}>
+          <ActivityIndicator color={tintColor} size="small" />
+        </View>
+      );
+    }
+    if (reachedEnd) {
+      return (
+        <View style={styles.historyEnd}>
+          <Text style={[styles.historyEndText, { color: mutedColor }]}>Inicio de la conversacion</Text>
+        </View>
+      );
+    }
+    return (
+      <Pressable style={styles.historyLoader} onPress={loadOlder}>
+        <Text style={[styles.historyButtonText, { color: tintColor }]}>
+          Cargar mensajes anteriores
+        </Text>
+      </Pressable>
+    );
+  }, [conversationId, loadOlder, loadingOlder, messages.length, mutedColor, reachedEnd, tintColor]);
+
+  useEffect(() => {
+    if (combinedMessages.length && isNearBottom) {
+      scrollToBottom();
+    }
+  }, [combinedMessages.length, isNearBottom, scrollToBottom]);
+
+  useEffect(() => {
+    if (!combinedMessages.length) return;
+    const latest = combinedMessages[combinedMessages.length - 1];
+    if (!listInitializedRef.current) {
+      lastMessageIdRef.current = latest.id;
+      listInitializedRef.current = true;
+      return;
+    }
+    if (latest.id === lastMessageIdRef.current) {
+      return;
+    }
+    lastMessageIdRef.current = latest.id;
+    if (!latest.pending && latest.from && latest.from !== currentUser?.uid) {
+      playReceive();
+    }
+  }, [combinedMessages, currentUser?.uid, playReceive]);
 
   if (!conversationId) {
     return (
@@ -173,6 +263,11 @@ export function ChatThread({
           <Text style={[styles.headerName, { color: textColor }]}>
             {partner?.displayName || 'Sin nombre'}
           </Text>
+          {subjectName ? (
+            <Text style={[styles.headerSubject, { color: mutedColor }]} numberOfLines={1}>
+              {subjectName}
+            </Text>
+          ) : null}
           <Text style={[styles.headerPresence, { color: mutedColor }]}>
             {isPartnerTyping
               ? 'Escribiendo...'
@@ -183,6 +278,7 @@ export function ChatThread({
         </View>
       </View>
       <FlatList
+        ref={listRef}
         data={combinedMessages}
         renderItem={({ item }) => (
           <MessageBubble
@@ -194,13 +290,8 @@ export function ChatThread({
           />
         )}
         keyExtractor={(item) => item.id}
-        inverted
         contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-        onEndReachedThreshold={0.2}
-        onEndReached={loadOlder}
-        ListFooterComponent={
-          loadingOlder ? <ActivityIndicator color={tintColor} style={styles.loadingMore} /> : null
-        }
+        ListHeaderComponent={historyComponent}
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator color={tintColor} style={styles.emptyLoader} />
@@ -210,6 +301,13 @@ export function ChatThread({
             </View>
           )
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={() => {
+          if (isNearBottom) {
+            scrollToBottom();
+          }
+        }}
       />
       {isPartnerTyping && (
         <View style={styles.typingRow}>
@@ -221,6 +319,7 @@ export function ChatThread({
         currentUser={currentUser}
         partner={partner}
         onQueueMessage={onQueueMessage}
+        onSendFeedback={playSend}
       />
     </View>
   );
@@ -355,6 +454,11 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  headerSubject: {
+    fontSize: 12,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
   headerPresence: {
     fontSize: 13,
   },
@@ -409,8 +513,22 @@ const styles = StyleSheet.create({
   emptyLoader: {
     marginVertical: 24,
   },
-  loadingMore: {
-    marginVertical: 16,
+  historyLoader: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  historyButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  historyEnd: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  historyEndText: {
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   typingRow: {
     paddingHorizontal: 16,
