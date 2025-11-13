@@ -37,7 +37,7 @@ export default function MatriculaScreen() {
   const MAX_BYTES = 8 * 1024 * 1024; // 8MB
 
   const hours = useMemo(() => [6, 8, 10, 12, 14, 16, 18, 20], []);
-  const days = useMemo(() => ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'], []);
+  const days = useMemo(() => ['Lun', 'Mar', 'Miï¿½', 'Jue', 'Vie', 'Sï¿½b'], []);
 
   const draftKey = user?.uid ? draftKeyFor(user.uid, subjectKey) : null;
 
@@ -85,7 +85,7 @@ export default function MatriculaScreen() {
     };
   }, [draftKey]);
 
-  // Persist draft on every change (solo pequeños objetos, así queda listo para reanudar sin internet)
+  // Persist draft on every change (solo pequeï¿½os objetos, asï¿½ queda listo para reanudar sin internet)
   useEffect(() => {
     if (!draftKey) return;
     const payload = {
@@ -110,7 +110,7 @@ export default function MatriculaScreen() {
         const snap2 = await getDoc(doc(db, 'users', user.uid, 'offers', subjectKey));
         if (snap1.exists() || snap2.exists()) {
           setHasExisting(true);
-          topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
+          topAlert.show('Ya tienes una tutorï¿½a creada para esta materia', 'info');
           setTimeout(() => router.back(), 900);
         }
       } catch (error) {
@@ -122,7 +122,7 @@ export default function MatriculaScreen() {
   // Kick non-teachers
   useEffect(() => {
     if (ready && user && roleLoaded && !isTeacher) {
-      topAlert.show('Solo docentes pueden matricular tutorías', 'error');
+      topAlert.show('Solo docentes pueden matricular tutorï¿½as', 'error');
       router.replace('/');
     }
   }, [ready, user, roleLoaded, isTeacher, topAlert, router]);
@@ -147,7 +147,7 @@ export default function MatriculaScreen() {
       }
     } catch {}
     if (size && size > MAX_BYTES) {
-      topAlert.show('Imagen demasiado grande (máx 8MB)', 'error');
+      topAlert.show('Imagen demasiado grande (mï¿½x 8MB)', 'error');
       return;
     }
     setImages((arr) => (arr.length >= MAX_IMAGES ? [asset.uri] : [...arr, asset.uri]));
@@ -208,7 +208,7 @@ export default function MatriculaScreen() {
       const mainRef = doc(db, 'offers', id);
       const snap = await getDoc(mainRef);
       if (snap.exists()) {
-        topAlert.show('Ya tienes una tutoría creada para esta materia', 'error');
+        topAlert.show('Ya tienes una tutorï¿½a creada para esta materia', 'error');
         return;
       }
       await setDoc(mainRef, payload, { merge: false });
@@ -219,7 +219,7 @@ export default function MatriculaScreen() {
       try {
         if (e && e.message) topAlert.show(`Error: ${e.message}`, 'error');
       } catch {}
-      // fallback if rules solo permiten subcolección del usuario
+      // fallback if rules solo permiten subcolecciï¿½n del usuario
       try {
         const id2 = `${subjectKey}`;
         await setDoc(doc(db, 'users', user.uid, 'offers', id2), payload, { merge: false });
@@ -249,17 +249,17 @@ export default function MatriculaScreen() {
 
       {connectivity.isOffline && (
         <Text style={styles.offlineHint}>
-          Sin conexión: guardamos un borrador local (incluye horarios y pendientes) para reanudar luego.
+          Sin conexiÃ³n: guardamos un borrador local (incluye horarios y pendientes) para reanudar luego.
         </Text>
       )}
 
-      <Text style={styles.label}>Máximo de alumnos</Text>
+      <Text style={styles.label}>MÃ¡ximo de alumnos</Text>
       <TextInput
         style={styles.input}
         keyboardType="numeric"
         value={maxStudents}
         onChangeText={(t) => setMaxStudents(t.replace(/[^0-9]/g, ''))}
-        placeholder="Ej: 10"
+        placeholder="si quieres ilimitado deja vacÃ­o"
         placeholderTextColor="#9aa3b2"
       />
 
@@ -269,7 +269,7 @@ export default function MatriculaScreen() {
         keyboardType="numeric"
         value={price}
         onChangeText={(t) => setPrice(t.replace(/[^0-9.]/g, ''))}
-        placeholder="Ej: 25"
+        placeholder="Ej: 25 (dolares)"
         placeholderTextColor="#9aa3b2"
       />
 
