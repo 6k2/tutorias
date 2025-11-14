@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,7 +20,7 @@ import { ChatThread } from '../../features/chat/ChatThread';
 import { useAuthUser } from '../../features/chat/hooks/useAuthUser';
 import { useChatEnrollments } from '../../features/chat/hooks/useChatEnrollments';
 import { useUserConversations } from '../../features/chat/hooks/useConversation';
-import { useSelfPresence } from '../../features/chat/hooks/usePresence';
+import { usePresence, useSelfPresence } from '../../features/chat/hooks/usePresence';
 import { persistMessage } from '../../features/chat/utils/persistMessage';
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 import { useThemeColor } from '../../hooks/useThemeColor';
@@ -34,7 +35,8 @@ export default function ChatsScreen() {
   const connectivity = useConnectivity();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const autoSelectOnLoad = width >= 768;
+  const isSmallScreen = width < 768;
+  const autoSelectOnLoad = !isSmallScreen;
   const selectionBootedRef = useRef(false);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [pendingMessages, setPendingMessages] = useState({});
@@ -48,6 +50,9 @@ export default function ChatsScreen() {
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
   const background = useThemeColor({}, 'background');
+  const mutedColor = useThemeColor({}, 'icon');
+  const headerBackground = useThemeColor({ light: '#f5f6ff', dark: '#1c1d2a' }, 'background');
+  const headerBorder = `${mutedColor}22`;
   const contentBottomInset = (insets.bottom ?? 0) + TAB_BAR_SAFE_PADDING;
 
   useEffect(() => {
@@ -222,6 +227,8 @@ export default function ChatsScreen() {
     return ensurePartnerProfile(activeConversation, null);
   }, [activeConversation, ensurePartnerProfile]);
 
+  const partnerPresence = usePresence(activePartner?.uid);
+
   const threadProps = useMemo(() => {
     if (!activeConversation) return { conversation: null, partner: null };
     return {
@@ -238,6 +245,11 @@ export default function ChatsScreen() {
     },
     []
   );
+
+  const handleBackToInbox = useCallback(() => {
+    selectionBootedRef.current = false;
+    setActiveConversationId(null);
+  }, []);
 
   if (!bootReady || currentUser === undefined) {
     return (
@@ -258,6 +270,110 @@ export default function ChatsScreen() {
   const pendingForActive = activeConversationId ? pendingMessages[activeConversationId] || [] : [];
 
   const materialsBadgeCount = isStudent ? materialsInbox.newCount || 0 : 0;
+
+  const currentUserInitial = getInitial(currentUser?.displayName || currentUser?.email);
+  const partnerInitial = getInitial(activePartner?.displayName);
+
+  const mobileSidebarHeader = isSmallScreen
+    ? (
+        <View
+          style={[
+            styles.mobileHeader,
+            { backgroundColor: headerBackground, borderBottomColor: headerBorder },
+          ]}
+        >
+          <View style={styles.mobileHeaderTopRow}>
+            <View style={styles.mobileHeaderProfile}>
+              {currentUser?.photoURL ? (
+                <Image source={{ uri: currentUser.photoURL }} style={styles.mobileAvatar} />
+              ) : (
+                <View
+                  style={[
+                    styles.mobileAvatarFallback,
+                    { backgroundColor: `${mutedColor}33` },
+                  ]}
+                >
+                  <Text style={[styles.mobileAvatarInitials, { color: textColor }]}>
+                    {currentUserInitial}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.mobileHeaderTextGroup}>
+                <Text style={[styles.mobileHeaderTitle, { color: textColor }]}>Mensajes</Text>
+                <Text
+                  style={[styles.mobileHeaderSubtitle, { color: `${mutedColor}cc` }]}
+                  numberOfLines={1}
+                >
+                  Conversa con tus tutores y alumnos
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => setCreateModalVisible(true)}
+              style={[
+                styles.mobileIconButton,
+                { backgroundColor: `${tintColor}18`, borderColor: `${tintColor}30` },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Nueva conversacion"
+            >
+              <MaterialIcons name="chat" size={22} color={tintColor} />
+            </Pressable>
+          </View>
+        </View>
+      )
+    : null;
+
+  const mobileThreadHeader = isSmallScreen && activeConversation
+    ? (
+        <View
+          style={[
+            styles.mobileThreadBar,
+            { backgroundColor: headerBackground, borderBottomColor: headerBorder },
+          ]}
+        >
+          <Pressable
+            onPress={handleBackToInbox}
+            style={[styles.mobileThreadBack, { borderColor: `${mutedColor}33` }]}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Volver a la bandeja"
+          >
+            <MaterialIcons name="arrow-back-ios-new" size={20} color={textColor} />
+          </Pressable>
+          <View style={styles.mobileThreadInfoWrapper}>
+            {activePartner?.photoURL ? (
+              <Image source={{ uri: activePartner.photoURL }} style={styles.mobileThreadAvatar} />
+            ) : (
+              <View
+                style={[
+                  styles.mobileThreadAvatarFallback,
+                  { backgroundColor: `${mutedColor}33` },
+                ]}
+              >
+                <Text style={[styles.mobileThreadAvatarInitials, { color: textColor }]}>
+                  {partnerInitial}
+                </Text>
+              </View>
+            )}
+            <View style={styles.mobileThreadTextGroup}>
+              <Text style={[styles.mobileThreadName, { color: textColor }]} numberOfLines={1}>
+                {activePartner?.displayName || 'Sin nombre'}
+              </Text>
+              <Text
+                style={[styles.mobileThreadPresence, { color: `${mutedColor}cc` }]}
+                numberOfLines={1}
+              >
+                {partnerPresence.online
+                  ? 'En linea ahora'
+                  : formatRelativePresence(partnerPresence.lastSeen)}
+              </Text>
+            </View>
+          </View>
+          <MaterialIcons name="more-vert" size={22} color={tintColor} />
+        </View>
+      )
+    : null;
 
   return (
     <>
@@ -336,6 +452,7 @@ export default function ChatsScreen() {
                 loadingEnrollments={enrollments.loading}
                 onCreateConversation={() => setCreateModalVisible(true)}
                 bottomOffset={contentBottomInset}
+                showCreateButton={!isSmallScreen}
               />
             }
             thread={
@@ -346,19 +463,55 @@ export default function ChatsScreen() {
                 pendingMessages={pendingForActive}
                 onQueueMessage={registerPendingMessage}
                 bottomInset={contentBottomInset}
+                showHeader={!isSmallScreen}
               />
             }
             isThreadOpen={Boolean(activeConversation)}
-            onBack={() => {
-              selectionBootedRef.current = false;
-              setActiveConversationId(null);
-            }}
+            onBack={handleBackToInbox}
             offline={connectivity.isOffline}
+            mobileHeader={mobileSidebarHeader}
+            mobileThreadHeader={mobileThreadHeader}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );
+}
+
+function getInitial(value) {
+  if (!value) return '?';
+  const trimmed = String(value).trim();
+  if (!trimmed) return '?';
+  return trimmed[0].toUpperCase();
+}
+
+function formatRelativePresence(lastSeen) {
+  if (!lastSeen) return 'Fuera de linea';
+  try {
+    const lastSeenDate = new Date(lastSeen);
+    const now = Date.now();
+    const diff = now - lastSeenDate.getTime();
+    if (Number.isNaN(diff)) {
+      return 'Fuera de linea';
+    }
+    if (diff < 60 * 1000) {
+      return 'Activo hace un momento';
+    }
+    if (diff < 60 * 60 * 1000) {
+      const minutes = Math.max(1, Math.round(diff / (60 * 1000)));
+      return `Activo hace ${minutes} min`;
+    }
+    if (diff < 24 * 60 * 60 * 1000) {
+      const hours = Math.max(1, Math.round(diff / (60 * 60 * 1000)));
+      return `Activo hace ${hours} h`;
+    }
+    return `Visto ${lastSeenDate.toLocaleDateString()} ${lastSeenDate.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  } catch (error) {
+    return 'Fuera de linea';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -376,6 +529,117 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  mobileHeader: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  mobileHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  mobileHeaderProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  mobileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  mobileAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileAvatarInitials: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  mobileHeaderTextGroup: {
+    flex: 1,
+  },
+  mobileHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  mobileHeaderSubtitle: {
+    fontSize: 13,
+  },
+  mobileIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  mobileThreadBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  },
+  mobileThreadBack: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  mobileThreadInfoWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mobileThreadAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  mobileThreadAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileThreadAvatarInitials: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  mobileThreadTextGroup: {
+    flex: 1,
+  },
+  mobileThreadName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  mobileThreadPresence: {
+    fontSize: 12,
+    marginTop: 2,
   },
   materialsBanner: {
     flexDirection: 'row',

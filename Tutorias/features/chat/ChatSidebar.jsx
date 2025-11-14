@@ -14,6 +14,7 @@ export function ChatSidebar({
   loadingEnrollments,
   onCreateConversation,
   bottomOffset = 0,
+  showCreateButton = true,
 }) {
   const [search, setSearch] = useState('');
 
@@ -74,7 +75,7 @@ export function ChatSidebar({
               />
             )}
           </View>
-          {typeof onCreateConversation === 'function' ? (
+          {showCreateButton && typeof onCreateConversation === 'function' ? (
             <Pressable
               onPress={() => onCreateConversation()}
               style={[styles.newButton, { borderColor: `${borderColor}33` }]}

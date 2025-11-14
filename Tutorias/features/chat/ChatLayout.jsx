@@ -2,7 +2,15 @@ import React from 'react';
 import { View, StyleSheet, useWindowDimensions, Pressable, Text } from 'react-native';
 import { useThemeColor } from '../../hooks/useThemeColor';
 
-export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = false }) {
+export function ChatLayout({
+  sidebar,
+  thread,
+  isThreadOpen,
+  onBack,
+  offline = false,
+  mobileHeader = null,
+  mobileThreadHeader = null,
+}) {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
 
@@ -28,16 +36,23 @@ export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = fa
         <OfflineBanner />
         {isThreadOpen ? (
           <View style={styles.threadWrapper}>
-            <Pressable
-              style={[styles.backRow, { borderBottomColor: `${divider}40` }]}
-              onPress={onBack}
-            >
-              <Text style={[styles.backText, { color: text }]}>Volver</Text>
-            </Pressable>
-            {thread}
+            {mobileThreadHeader ? (
+              <View style={styles.mobileHeaderHolder}>{mobileThreadHeader}</View>
+            ) : (
+              <Pressable
+                style={[styles.backRow, { borderBottomColor: `${divider}40` }]}
+                onPress={onBack}
+              >
+                <Text style={[styles.backText, { color: text }]}>Volver</Text>
+              </Pressable>
+            )}
+            <View style={styles.threadBody}>{thread}</View>
           </View>
         ) : (
-          <View style={[styles.sidebarWrapper, styles.sidebarMobile]}>{sidebar}</View>
+          <View style={[styles.sidebarWrapper, styles.sidebarMobile]}>
+            {mobileHeader ? <View style={styles.mobileHeaderHolder}>{mobileHeader}</View> : null}
+            <View style={styles.sidebarBody}>{sidebar}</View>
+          </View>
         )}
       </View>
     );
@@ -58,6 +73,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  mobileHeaderHolder: {
+    width: '100%',
+  },
   desktopRow: {
     flex: 1,
     flexDirection: 'row',
@@ -70,7 +88,13 @@ const styles = StyleSheet.create({
   sidebarMobile: {
     width: '100%',
   },
+  sidebarBody: {
+    flex: 1,
+  },
   threadWrapper: {
+    flex: 1,
+  },
+  threadBody: {
     flex: 1,
   },
   backRow: {

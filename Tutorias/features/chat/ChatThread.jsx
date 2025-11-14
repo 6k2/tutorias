@@ -34,6 +34,7 @@ export function ChatThread({
   pendingMessages = [],
   onQueueMessage,
   bottomInset = 0,
+  showHeader = true,
 }) {
   const conversationId = conversation?.id;
   const [messages, setMessages] = useState([]);
@@ -244,34 +245,36 @@ export function ChatThread({
     <View
       style={[styles.container, { backgroundColor: background, paddingBottom: safeBottomInset }]}
     >
-      <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}>
-          {partner?.photoURL ? (
-            <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
-          ) : (
-            <Text style={[styles.headerInitials, { color: textColor }]}>
-              {partner?.displayName?.[0]?.toUpperCase() || '?'}
+      {showHeader ? (
+        <View style={[styles.header, { borderBottomColor: borderColor }]}>
+          <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}>
+            {partner?.photoURL ? (
+              <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
+            ) : (
+              <Text style={[styles.headerInitials, { color: textColor }]}>
+                {partner?.displayName?.[0]?.toUpperCase() || '?'}
+              </Text>
+            )}
+          </View>
+          <View style={styles.headerInfo}>
+            <Text style={[styles.headerName, { color: textColor }]}>
+              {partner?.displayName || 'Sin nombre'}
             </Text>
-          )}
-        </View>
-        <View style={styles.headerInfo}>
-          <Text style={[styles.headerName, { color: textColor }]}>
-            {partner?.displayName || 'Sin nombre'}
-          </Text>
-          {subjectName ? (
-            <Text style={[styles.headerSubject, { color: mutedColor }]} numberOfLines={1}>
-              {subjectName}
+            {subjectName ? (
+              <Text style={[styles.headerSubject, { color: mutedColor }]} numberOfLines={1}>
+                {subjectName}
+              </Text>
+            ) : null}
+            <Text style={[styles.headerPresence, { color: mutedColor }]}>
+              {isPartnerTyping
+                ? 'Escribiendo...'
+                : presence.online
+                ? 'En linea'
+                : formatLastSeen(presence.lastSeen)}
             </Text>
-          ) : null}
-          <Text style={[styles.headerPresence, { color: mutedColor }]}>
-            {isPartnerTyping
-              ? 'Escribiendo...'
-              : presence.online
-              ? 'En linea'
-              : formatLastSeen(presence.lastSeen)}
-          </Text>
+          </View>
         </View>
-      </View>
+      ) : null}
       <FlatList
         ref={listRef}
         data={combinedMessages}
