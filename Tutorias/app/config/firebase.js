@@ -1,6 +1,7 @@
 // Firebase core (browser + RN). Avoid top-level analytics usage to support SSR/static.
 // Firebase setup (works on web + native). We keep it chill and SSR-safe, xd
 // Avoid top-level analytics init so static builds don't cry.
+import './polyfills';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { Platform } from "react-native";
@@ -57,27 +58,49 @@ export const auth = _auth;
 // Firestore gets persistent local cache on native so reads/writes survive offline sessions.
 // On unsupported devices we warn and downgrade to an in-memory cache so the app still works.
 let _db;
-if (Platform.OS === "web") {
+const isWeb = Platform.OS === "web";
+if (isWeb) {
   _db = getFirestore(app);
 } else {
+  const nativeFirestoreSettings = {
+    experimentalAutoDetectLongPolling: true,
+    experimentalForceLongPolling: true,
+    useFetchStreams: false,
+  };
+
+  const withNativeNetworkFixes = (options = {}) => ({
+    ...nativeFirestoreSettings,
+    ...options,
+  });
+
   try {
-    _db = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager(),
-      }),
-    });
+    _db = initializeFirestore(
+      app,
+      withNativeNetworkFixes({
+        localCache: persistentLocalCache({
+          tabManager: persistentSingleTabManager(),
+        }),
+      })
+    );
   } catch (error) {
     console.warn(
       "Firestore persistence unavailable, falling back to memory cache",
       error
     );
     try {
-      _db = initializeFirestore(app, {
-        localCache: memoryLocalCache(),
-      });
+      _db = initializeFirestore(
+        app,
+        withNativeNetworkFixes({
+          localCache: memoryLocalCache(),
+        })
+      );
     } catch (_fallbackError) {
-      // If Firestore was already initialised (Fast Refresh), grab the existing instance.
-      _db = getFirestore(app);
+      try {
+        _db = initializeFirestore(app, withNativeNetworkFixes());
+      } catch (_finalError) {
+        // If Firestore was already initialised (Fast Refresh), grab the existing instance.
+        _db = getFirestore(app);
+      }
     }
   }
 }

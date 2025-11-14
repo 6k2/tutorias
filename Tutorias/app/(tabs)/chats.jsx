@@ -26,6 +26,7 @@ import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsIn
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ThemeOverrideProvider } from '../../hooks/useThemeOverride';
 
 const TAB_BAR_SAFE_PADDING = 72;
 const KEYBOARD_BEHAVIOR = Platform.OS === 'ios' ? 'padding' : undefined;
@@ -271,58 +272,9 @@ export default function ChatsScreen() {
 
   const materialsBadgeCount = isStudent ? materialsInbox.newCount || 0 : 0;
 
-  const currentUserInitial = getInitial(currentUser?.displayName || currentUser?.email);
   const partnerInitial = getInitial(activePartner?.displayName);
 
-  const mobileSidebarHeader = isSmallScreen
-    ? (
-        <View
-          style={[
-            styles.mobileHeader,
-            { backgroundColor: headerBackground, borderBottomColor: headerBorder },
-          ]}
-        >
-          <View style={styles.mobileHeaderTopRow}>
-            <View style={styles.mobileHeaderProfile}>
-              {currentUser?.photoURL ? (
-                <Image source={{ uri: currentUser.photoURL }} style={styles.mobileAvatar} />
-              ) : (
-                <View
-                  style={[
-                    styles.mobileAvatarFallback,
-                    { backgroundColor: `${mutedColor}33` },
-                  ]}
-                >
-                  <Text style={[styles.mobileAvatarInitials, { color: textColor }]}>
-                    {currentUserInitial}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.mobileHeaderTextGroup}>
-                <Text style={[styles.mobileHeaderTitle, { color: textColor }]}>Mensajes</Text>
-                <Text
-                  style={[styles.mobileHeaderSubtitle, { color: `${mutedColor}cc` }]}
-                  numberOfLines={1}
-                >
-                  Conversa con tus tutores y alumnos
-                </Text>
-              </View>
-            </View>
-            <Pressable
-              onPress={() => setCreateModalVisible(true)}
-              style={[
-                styles.mobileIconButton,
-                { backgroundColor: `${tintColor}18`, borderColor: `${tintColor}30` },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Nueva conversacion"
-            >
-              <MaterialIcons name="chat" size={22} color={tintColor} />
-            </Pressable>
-          </View>
-        </View>
-      )
-    : null;
+  const mobileSidebarHeader = null;
 
   const mobileThreadHeader = isSmallScreen && activeConversation
     ? (
@@ -376,8 +328,9 @@ export default function ChatsScreen() {
     : null;
 
   return (
-    <>
-      <Modal visible={!!createModalVisible} animationType="slide" transparent>
+    <ThemeOverrideProvider value="dark">
+      <>
+        <Modal visible={!!createModalVisible} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalCard, { backgroundColor: background }]}>
             <Text style={[styles.modalTitle, { color: textColor }]}>Crear conversacion</Text>
@@ -475,6 +428,7 @@ export default function ChatsScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </>
+    </ThemeOverrideProvider>
   );
 }
 

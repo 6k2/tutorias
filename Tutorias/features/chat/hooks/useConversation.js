@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  collection,
-  collectionGroup,
-  doc,
-  getDocs,
-  limit,
-  onSnapshot,
-  query,
-  where,
-} from 'firebase/firestore';
+import { collection, doc, getDocs, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 import { ensureConversationRecord } from '../api/conversations';
 
@@ -173,10 +164,6 @@ export function useUserConversations(uid, options = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fromCache, setFromCache] = useState(false);
-  const conversationWatchers = useRef(new Map());
-  const conversationKeysById = useRef(new Map());
-  const conversationIdByKey = useRef(new Map());
-  const conversationsStore = useRef(new Map());
   const participantsCache = useRef(new Map());
 
   const isConversationAllowed = useCallback(
@@ -195,169 +182,93 @@ export function useUserConversations(uid, options = {}) {
     [metaByKey]
   );
 
-  const dropConversation = useCallback((conversationId) => {
-    const unsubscribe = conversationWatchers.current.get(conversationId);
-    if (unsubscribe) {
-      unsubscribe();
-    }
-    conversationWatchers.current.delete(conversationId);
-    const key = conversationKeysById.current.get(conversationId);
-    if (key) {
-      conversationIdByKey.current.delete(key);
-    }
-    conversationKeysById.current.delete(conversationId);
-    participantsCache.current.delete(conversationId);
-    conversationsStore.current.delete(conversationId);
-    setItems(() => {
-      if (!conversationsStore.current.size) {
-        return [];
-      }
-      const next = Array.from(conversationsStore.current.values());
-      next.sort((a, b) => conversationSortValue(b) - conversationSortValue(a));
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
     if (!uid) {
       setItems([]);
       setLoading(false);
       setFromCache(false);
-      conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
-      conversationWatchers.current.clear();
-      conversationKeysById.current.clear();
-      conversationIdByKey.current.clear();
-      conversationsStore.current.clear();
       participantsCache.current.clear();
       return () => {};
     }
 
     setLoading(true);
-    const participantsQuery = query(
-      collectionGroup(db, 'participants'),
-      where('uid', '==', uid)
+    setFromCache(false);
+    const conversationsRef = collection(db, 'conversations');
+    const conversationsQuery = query(
+      conversationsRef,
+      where('participantUids', 'array-contains', uid)
     );
 
-    const unsubscribeParticipants = onSnapshot(
-      participantsQuery,
-      (snapshot) => {
-        setFromCache((prev) => prev || snapshot.metadata?.fromCache || false);
-        const nextConversationIds = new Set();
-        snapshot.forEach((docSnapshot) => {
-          const data = docSnapshot.data();
-          if (data?.conversationId) {
-            nextConversationIds.add(data.conversationId);
-          }
-        });
+    let cancelled = false;
 
-        conversationWatchers.current.forEach((unsubscribe, conversationId) => {
-          if (!nextConversationIds.has(conversationId)) {
-            unsubscribe();
-            conversationWatchers.current.delete(conversationId);
-            conversationKeysById.current.delete(conversationId);
-            setItems((prev) => prev.filter((item) => item.id !== conversationId));
-          }
-        });
+    const processSnapshot = async (snapshot) => {
+      setFromCache((prev) => prev || snapshot.metadata?.fromCache || false);
+      const seenIds = new Set();
+      const nextItems = [];
 
-        nextConversationIds.forEach((conversationId) => {
-          if (conversationWatchers.current.has(conversationId)) {
-            return;
-          }
-
-          const conversationRef = doc(db, 'conversations', conversationId);
-          const unsubscribeConversation = onSnapshot(
-            conversationRef,
-            async (conversationDoc) => {
-              setFromCache((prev) => prev || conversationDoc.metadata?.fromCache || false);
-
-              if (!conversationDoc.exists()) {
-                dropConversation(conversationId);
-                return;
-              }
-
-              const data = conversationDoc.data();
-              conversationKeysById.current.set(conversationId, data.conversationKey);
-              if (!isConversationAllowed(data)) {
-                dropConversation(conversationId);
-                return;
-              }
-
-              let participants = participantsCache.current.get(conversationId);
-              if (!participants) {
-                try {
-                  participants = await fetchParticipants(conversationRef);
-                  participantsCache.current.set(conversationId, participants);
-                } catch (error) {
-                  console.error('chat: failed to load participants', error);
-                  participants = [];
-                }
-              }
-
-              const enrollmentMeta = enrollmentForKey(data.conversationKey);
-              const nextItem = {
-                id: conversationDoc.id,
-                ...data,
-                participants,
-                enrollmentMeta,
-              };
-
-              const existingIdForKey = conversationIdByKey.current.get(data.conversationKey);
-              if (existingIdForKey && existingIdForKey !== conversationId) {
-                const existingItem = conversationsStore.current.get(existingIdForKey);
-                if (existingItem && shouldPreferCandidate(existingItem, nextItem)) {
-                  dropConversation(existingIdForKey);
-                } else {
-                  dropConversation(conversationId);
-                  return;
-                }
-              }
-
-              conversationIdByKey.current.set(data.conversationKey, conversationId);
-              conversationsStore.current.set(conversationId, nextItem);
-              setItems(() => {
-                const ordered = Array.from(conversationsStore.current.values());
-                ordered.sort((a, b) => conversationSortValue(b) - conversationSortValue(a));
-                return ordered;
-              });
-              setLoading(false);
-            },
-            (error) => {
-              console.error('chat: failed conversation watch', error);
-            }
-          );
-
-          conversationWatchers.current.set(conversationId, unsubscribeConversation);
-        });
-
-        if (nextConversationIds.size === 0) {
-          setLoading(false);
+      for (const docSnapshot of snapshot.docs) {
+        const data = docSnapshot.data();
+        if (!isConversationAllowed(data)) {
+          continue;
         }
+
+        let participants = participantsCache.current.get(docSnapshot.id);
+        if (!participants) {
+          try {
+            participants = await fetchParticipants(docSnapshot.ref);
+            participantsCache.current.set(docSnapshot.id, participants);
+          } catch (error) {
+            console.error('chat: failed to load participants', error);
+            participants = [];
+          }
+        }
+
+        const enrollmentMeta = enrollmentForKey(data.conversationKey);
+        const nextItem = {
+          id: docSnapshot.id,
+          ...data,
+          participants,
+          enrollmentMeta,
+        };
+        seenIds.add(docSnapshot.id);
+        nextItems.push(nextItem);
+      }
+
+      Array.from(participantsCache.current.keys()).forEach((conversationId) => {
+        if (!seenIds.has(conversationId)) {
+          participantsCache.current.delete(conversationId);
+        }
+      });
+
+      nextItems.sort((a, b) => conversationSortValue(b) - conversationSortValue(a));
+      if (!cancelled) {
+        setItems(nextItems);
+        setLoading(false);
+      }
+    };
+
+    const unsubscribe = onSnapshot(
+      conversationsQuery,
+      (snapshot) => {
+        processSnapshot(snapshot).catch((error) => {
+          console.error('chat: conversations snapshot process failed', error);
+        });
       },
       (error) => {
-        console.error('chat: participants watch failed', error);
-        setItems([]);
-        setLoading(false);
+        console.error('chat: conversations watch failed', error);
+        if (!cancelled) {
+          setItems([]);
+          setLoading(false);
+        }
       }
     );
 
     return () => {
-      unsubscribeParticipants();
-      conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
-      conversationWatchers.current.clear();
-      conversationKeysById.current.clear();
+      cancelled = true;
+      unsubscribe();
+      participantsCache.current.clear();
     };
-  }, [uid, isConversationAllowed, enrollmentForKey, dropConversation]);
-
-  useEffect(() => {
-    if (!allowedKeys || !allowedKeys.size) {
-      return;
-    }
-    conversationKeysById.current.forEach((key, conversationId) => {
-      if (!allowedKeys.has(key)) {
-        dropConversation(conversationId);
-      }
-    });
-  }, [allowedKeys, dropConversation]);
+  }, [uid, isConversationAllowed, enrollmentForKey]);
 
   return {
     items,

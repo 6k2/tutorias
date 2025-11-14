@@ -58,7 +58,7 @@ export function ChatThread({
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
-  const mutedColor = useThemeColor({}, 'icon');
+  const mutedColor = useThemeColor({}, 'icon') || '#ffffff88';
   const borderColor = `${mutedColor}40`;
   const safeBottomInset = Math.max(0, bottomInset);
   const listBottomPadding = safeBottomInset + 120;

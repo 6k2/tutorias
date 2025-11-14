@@ -87,6 +87,7 @@ const styles = StyleSheet.create({
   },
   sidebarMobile: {
     width: '100%',
+    flex: 1,
   },
   sidebarBody: {
     flex: 1,

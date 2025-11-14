@@ -276,7 +276,7 @@ export default function ProfileScreen() {
             onMouseLeave={() => setHoveringPhoto(false)}
           >
             <MaterialIcons name="photo-camera" size={18} color="#fff" />
-            <Text style={styles.changePhotoText}>Cambiar foto</Text>
+            <Text style={styles.changePhotoText}>Cambiar foto K</Text>
           </TouchableOpacity>
         </View>
       </View>

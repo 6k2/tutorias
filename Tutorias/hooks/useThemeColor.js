@@ -5,9 +5,11 @@
 
 import { Colors } from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
+import { useThemeOverride } from './useThemeOverride';
 
 export function useThemeColor(props, colorName) {
-  const theme = useColorScheme() ?? 'light';
+  const override = useThemeOverride();
+  const theme = override ?? useColorScheme() ?? 'light';
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
