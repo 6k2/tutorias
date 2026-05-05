@@ -1,7 +1,7 @@
 // Home screen aka vibes central xd
 // Shows hero banner, subject cards, and quick actions.
 // Teachers can go to Matricular from here to post their offer.
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "expo-router";
 import {
   View,
@@ -13,38 +13,20 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { auth, db } from "../config/firebase";
+import { db } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useTopAlert } from "../../components/TopAlert";
+import { useSession } from "../../contexts/AuthContext";
 
 export default function HomeScreen() {
   const router = useRouter();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [role, setRole] = useState("");
-  const [uid, setUid] = useState("");
   const topAlert = useTopAlert();
-
-  useEffect(() => {
-    const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, async (u) => {
-      setIsAuthed(!!u);
-      setUid(u?.uid || "");
-      if (u) {
-        try {
-          const ref = doc(db, 'users', u.uid);
-          const snap = await getDoc(ref);
-          const d = snap.data() || {};
-          setRole(d.role || "");
-        } catch {}
-      } else {
-        setRole("");
-      }
-      setAuthChecked(true);
-    });
-    return () => unsub();
-  }, []);
+  const session = useSession();
+  const isAuthed = session.isAuthenticated;
+  const authChecked = session.ready;
+  const role = session.role;
+  const uid = session.user?.uid || "";
 
   // Static list of subjects we show on the home feed
   const subjects = useMemo(
@@ -88,7 +70,7 @@ export default function HomeScreen() {
   const cardShown = useRef(Array(subjects.length).fill(false)).current;
   const scrollYRef = useRef(0);
 
-  const maybeAnimateVisible = () => {
+  const maybeAnimateVisible = useCallback(() => {
     const viewportBottom = windowHeight + scrollYRef.current;
     subjects.forEach((_, i) => {
       const cardY = cardYs[i];
@@ -101,7 +83,7 @@ export default function HomeScreen() {
         }).start();
       }
     });
-  };
+  }, [cardAnims, cardShown, cardYs, subjects, windowHeight]);
 
   // Animate cards when they enter the viewport (fade/slide in).
   const onScroll = (e) => {
@@ -113,7 +95,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const id = requestAnimationFrame(() => maybeAnimateVisible());
     return () => cancelAnimationFrame(id);
-  }, [windowHeight]);
+  }, [maybeAnimateVisible]);
   // Detect small screens to adjust some styles
   const isSmall = windowHeight < 680 || windowWidth < 360;
   return ( // Main container view with background color
