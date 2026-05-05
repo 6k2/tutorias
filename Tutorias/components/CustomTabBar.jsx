@@ -1,14 +1,18 @@
-
-// Custom bottom tab bar with a cute elevated center bubble for Home, xd
-
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { IconSymbol } from './ui/IconSymbol';
+import { View, TouchableOpacity, StyleSheet, Platform, Text, useWindowDimensions } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { tokens } from './ui/tokens';
+
+const labels = { index: 'Inicio', profile: 'Perfil', chats: 'Chats' };
+const icons = { index: 'dashboard', profile: 'person', chats: 'forum' };
 
 export default function CustomTabBar({ state, descriptors, navigation }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.pill}>
+    <View style={isDesktop ? styles.sidebar : styles.bottomBar}>
+      {isDesktop && <View style={styles.brandBlock}><View style={styles.logo}><Text style={styles.logoText}>T</Text></View><Text style={styles.brand}>Tutorias</Text><Text style={styles.caption}>Learning OS</Text></View>}
+      <View style={styles.navList}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
@@ -16,21 +20,10 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
           };
-          const icon = options.tabBarIcon
-            ? options.tabBarIcon({ color: isFocused ? '#ffffff' : '#8C8FA5', focused: isFocused, size: 26 })
-            : <IconSymbol size={26} color={isFocused ? '#ffffff' : '#8C8FA5'} name={'house.fill'} />;
-
-          // Central elevated bubble for the middle tab (Home)
-          const isCenter = route.name === 'index';
           return (
-            <TouchableOpacity key={route.key} onPress={onPress} style={styles.item} accessibilityRole="button">
-              <View style={[
-                styles.iconWrap,
-                isFocused && !isCenter && styles.iconFocused,
-                isCenter && (isFocused ? styles.centerFocused : styles.centerIdle),
-              ]}>
-                {icon}
-              </View>
+            <TouchableOpacity key={route.key} onPress={onPress} style={[isDesktop ? styles.sideItem : styles.item, isFocused && styles.activeItem]} accessibilityRole="button">
+              {options.tabBarIcon ? options.tabBarIcon({ color: isFocused ? '#fff' : tokens.color.muted }) : <MaterialIcons name={icons[route.name] || 'circle'} size={22} color={isFocused ? '#fff' : tokens.color.muted} />}
+              {isDesktop && <Text style={[styles.sideLabel, isFocused && styles.activeLabel]}>{labels[route.name] || route.name}</Text>}
             </TouchableOpacity>
           );
         })}
@@ -39,44 +32,10 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   );
 }
 
+const webShadow = Platform.OS === 'web' ? { boxShadow: '0 20px 50px rgba(15,23,42,.10)' } : {};
 const styles = StyleSheet.create({
-  wrapper: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
-  },
-  pill: {
-    height: 68,
-    borderRadius: 22,
-    backgroundColor: '#1F223D',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-  },
-  item: { flex: 1, alignItems: 'center' },
-  iconWrap: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  iconFocused: {
-    backgroundColor: '#FF8E53',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 8px 16px rgba(255,142,83,0.35)' }
-      : { shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, elevation: 6 }),
-  },
-  centerIdle: { marginTop: -8 },
-  centerFocused: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FF8E53',
-    marginTop: -20,
-    borderWidth: 4,
-    borderColor: '#1F223D',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 10px 18px rgba(255,142,83,0.45)' }
-      : { shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 }),
-  },
+  sidebar: { position: 'fixed', left: 18, top: 18, bottom: 18, width: 236, borderRadius: 28, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: tokens.color.line, padding: 18, zIndex: 50, ...webShadow },
+  brandBlock: { marginBottom: 22, paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: tokens.color.line }, logo: { width: 46, height: 46, borderRadius: 16, backgroundColor: tokens.color.brand, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }, logoText: { color: '#fff', fontWeight: '900', fontSize: 22 }, brand: { color: tokens.color.ink, fontSize: 20, fontWeight: '900' }, caption: { color: tokens.color.muted, fontWeight: '700', marginTop: 2 }, navList: { gap: 8 },
+  sideItem: { minHeight: 48, borderRadius: 16, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }, sideLabel: { color: tokens.color.muted, fontWeight: '900' }, activeItem: { backgroundColor: tokens.color.brand }, activeLabel: { color: '#fff' },
+  bottomBar: { position: 'absolute', left: 18, right: 18, bottom: 18, height: 66, borderRadius: 24, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: tokens.color.line, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', zIndex: 50, ...webShadow }, item: { height: 46, width: 74, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 });
-

@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { doc, getDoc, runTransaction, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
+import { MaterialIcons } from '@expo/vector-icons';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useTopAlert } from '../../../components/TopAlert';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
 import { useConnectivity } from '../../../tools/offline';
 import { useUploadMaterial } from '../../../features/materials/hooks/useUploadMaterial';
 import { OFFERS_COLLECTION, RESERVATIONS_COLLECTION, RESERVATION_STATUS } from '../../../constants/firestore';
+import { tokens } from '../../../components/ui/tokens';
 
 const dayLabels = {
   Mon: 'Mon',
@@ -40,6 +42,8 @@ const slotKey = (slot) => `${slot.day}-${slot.hourStart}-${slot.hourEnd}`;
 
 export default function OfferDetailScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
   const router = useRouter();
   const params = useLocalSearchParams();
   const topAlert = useTopAlert();
@@ -175,7 +179,7 @@ export default function OfferDetailScreen() {
   return `${dayLabel} · ${hoursToLabel(slot.hourStart)} - ${hoursToLabel(slot.hourEnd)}`;
 };
 
-  const canBook = !loading && !submitting && !!selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer;
+  const canBook = !loading && !submitting && !!selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer && !connectivity.isOffline;
 
   const handleBook = async () => {
     if (!selectedSlot) {
@@ -184,6 +188,10 @@ export default function OfferDetailScreen() {
     }
     if (!user) {
       topAlert.show('Debes iniciar sesión para reservar', 'info');
+      return;
+    }
+    if (connectivity.isOffline) {
+      topAlert.show('Conéctate para completar el pago y confirmar tu solicitud.', 'info');
       return;
     }
     if (isOwnOffer) {
@@ -200,74 +208,16 @@ export default function OfferDetailScreen() {
     }
 
     setSubmitting(true);
-    let offerSnapshot = null;
-    try {
-      offerSnapshot = await runTransaction(db, async (transaction) => {
-        const offerRef = doc(db, OFFERS_COLLECTION, offerId);
-        const snap = await transaction.get(offerRef);
-        if (!snap.exists()) {
-          throw new Error('Oferta no disponible');
-        }
-        const data = snap.data() || {};
-        const max = Number(data.maxStudents || 0);
-        const enrolled = Number(data.enrolledCount || 0);
-        const pending = Number(data.pendingCount || 0);
-        const unlimitedOffer = max === 0;
-        if (!unlimitedOffer && enrolled + pending >= max) {
-          throw new Error('No hay cupos disponibles');
-        }
-        transaction.update(offerRef, {
-          pendingCount: pending + 1,
-          updatedAt: serverTimestamp(),
-        });
-        return data;
-      });
-
-      const reservationData = {
+    router.push({
+      pathname: '/payment/[offerId]',
+      params: {
         offerId,
-        subjectKey,
-        subjectName: offerSnapshot.subjectName || subjectName,
-        teacherId: offerSnapshot.uid,
-        studentId: user.uid,
-        status: RESERVATION_STATUS.PENDING,
-        slot: selectedSlot,
-        price: offerSnapshot.price || null,
-        studentDisplayName: user.displayName || user.email || '',
-        teacherDisplayName: offerSnapshot.username || offerSnapshot.teacherDisplayName || '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, RESERVATIONS_COLLECTION), reservationData);
-
-      setOffer((prev) => (prev ? { ...prev, pendingCount: Number(prev.pendingCount || 0) + 1 } : prev));
-      topAlert.show('Solicitud enviada. Espera la confirmación del docente.', 'success');
-      router.push('/agenda');
-    } catch (error) {
-      if (offerSnapshot && error?.message !== 'No hay cupos disponibles') {
-        try {
-          await runTransaction(db, async (transaction) => {
-            const offerRef = doc(db, OFFERS_COLLECTION, offerId);
-            const snap = await transaction.get(offerRef);
-            if (!snap.exists()) return;
-            const data = snap.data() || {};
-            const pending = Number(data.pendingCount || 0);
-            transaction.update(offerRef, {
-              pendingCount: Math.max(0, pending - 1),
-              updatedAt: serverTimestamp(),
-            });
-          });
-        } catch (rollbackError) {
-          console.error('offer detail: rollback failed', rollbackError);
-        }
-      }
-      const message = error?.message === 'No hay cupos disponibles'
-        ? 'No hay cupos disponibles'
-        : 'No se pudo crear la reserva';
-      topAlert.show(message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
+        subject: subjectKey,
+        name: subjectName,
+        slot: encodeURIComponent(JSON.stringify(selectedSlot)),
+      },
+    });
+    setSubmitting(false);
   };
 
   const handleUploadMaterial = useCallback(
@@ -299,7 +249,7 @@ export default function OfferDetailScreen() {
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: (insets?.top ?? 0) + 40 }]}>
-        <ActivityIndicator size="large" color="#FF8E53" />
+        <ActivityIndicator size="large" color="#4F46E5" />
         <Text style={styles.loadingText}>Cargando oferta...</Text>
       </View>
     );
@@ -314,8 +264,8 @@ export default function OfferDetailScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: '#1B1E36' }}
-      contentContainerStyle={{ padding: 16, paddingBottom: 32, paddingTop: (insets?.top ?? 0) + 12 }}
+      style={{ flex: 1, backgroundColor: tokens.color.page }}
+      contentContainerStyle={{ padding: 24, paddingBottom: 120, paddingTop: (insets?.top ?? 0) + 24, paddingLeft: isDesktop ? 284 : 24, maxWidth: isDesktop ? 1420 : undefined, alignSelf: 'center', width: '100%' }}
     >
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Text style={styles.backText}>Volver</Text>
@@ -389,6 +339,11 @@ export default function OfferDetailScreen() {
           <Text style={styles.alertText}>Reserva confirmada. Nos vemos en clase.</Text>
         </View>
       )}
+      {connectivity.isOffline && !isOwnOffer && (
+        <View style={styles.alertBox}>
+          <Text style={styles.alertText}>Estás sin conexión. Puedes revisar la oferta, pero el pago mock requiere conexión.</Text>
+        </View>
+      )}
       {isOwnOffer && (
         <View style={styles.alertBox}>
           <Text style={styles.alertText}>No puedes reservar una tutoría que tú mismo publicaste.</Text>
@@ -401,9 +356,9 @@ export default function OfferDetailScreen() {
         disabled={!canBook}
       >
         {submitting ? (
-          <ActivityIndicator size="small" color="#1B1E36" />
+          <ActivityIndicator size="small" color="#F6F7FB" />
         ) : (
-          <Text style={styles.bookBtnText}>Reservar</Text>
+          <Text style={styles.bookBtnText}>Reservar y pagar</Text>
         )}
       </TouchableOpacity>
 
@@ -435,10 +390,10 @@ export default function OfferDetailScreen() {
                   }
                 >
                   {uploadingMaterial && uploadingReservationId === reservation.id ? (
-                    <ActivityIndicator size="small" color="#1B1E36" />
+                    <ActivityIndicator size="small" color="#F6F7FB" />
                   ) : (
                     <>
-                      <MaterialIcons name="upload-file" size={18} color="#1B1E36" />
+                      <MaterialIcons name="upload-file" size={18} color="#F6F7FB" />
                       <Text style={styles.uploadBtnText}>Subir material</Text>
                     </>
                   )}
@@ -455,75 +410,75 @@ export default function OfferDetailScreen() {
 const styles = StyleSheet.create({
   center: {
     flex: 1,
-    backgroundColor: '#1B1E36',
+    backgroundColor: '#F6F7FB',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingText: { color: '#C7C9D9', marginTop: 12 },
+  loadingText: { color: '#64748B', marginTop: 12 },
   backBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFD580',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     marginBottom: 12,
   },
-  backText: { color: '#1B1E36', fontWeight: '800' },
+  backText: { color: '#3730A3', fontWeight: '800' },
   cover: {
     width: '100%',
-    height: 200,
-    borderRadius: 16,
-    marginBottom: 16,
+    height: 320,
+    borderRadius: 28,
+    marginBottom: 22,
   },
   coverPlaceholder: {
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coverPlaceholderText: { color: '#C7C9D9' },
-  title: { color: '#fff', fontSize: 26, fontWeight: '800' },
-  subtitle: { color: '#C7C9D9', marginTop: 4 },
-  price: { color: '#FF8E53', fontWeight: '800', fontSize: 20, marginTop: 10 },
+  coverPlaceholderText: { color: '#64748B' },
+  title: { color: '#111827', fontSize: 42, fontWeight: '800' },
+  subtitle: { color: '#64748B', marginTop: 4 },
+  price: { color: '#4F46E5', fontWeight: '800', fontSize: 20, marginTop: 10 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 8,
   },
-  metaLabel: { color: '#C7C9D9' },
-  metaValue: { color: '#fff', fontWeight: '700', marginLeft: 8 },
+  metaLabel: { color: '#64748B' },
+  metaValue: { color: '#111827', fontWeight: '700', marginLeft: 8 },
   section: { marginTop: 20 },
-  sectionTitle: { color: '#fff', fontWeight: '800', marginBottom: 8 },
-  sectionText: { color: '#C7C9D9', lineHeight: 20 },
+  sectionTitle: { color: '#111827', fontSize: 20, fontWeight: '800', marginBottom: 8 },
+  sectionText: { color: '#64748B', lineHeight: 20 },
   scheduleWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   slotChip: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
   },
-  slotChipSelected: { backgroundColor: '#FF8E53' },
-  slotChipText: { color: '#C7C9D9', fontWeight: '600' },
-  slotChipTextSelected: { color: '#1B1E36', fontWeight: '800' },
+  slotChipSelected: { backgroundColor: '#4F46E5' },
+  slotChipText: { color: '#64748B', fontWeight: '600' },
+  slotChipTextSelected: { color: '#F6F7FB', fontWeight: '800' },
   alertBox: {
     marginTop: 16,
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
     padding: 14,
     borderRadius: 12,
   },
-  alertText: { color: '#FFD580', fontWeight: '700' },
+  alertText: { color: '#3730A3', fontWeight: '700' },
   bookBtn: {
     marginTop: 24,
-    backgroundColor: '#FFD580',
+    backgroundColor: '#4F46E5',
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
   },
   bookBtnDisabled: { opacity: 0.4 },
-  bookBtnText: { color: '#1B1E36', fontWeight: '900', fontSize: 16 },
+  bookBtnText: { color: '#fff', fontWeight: '900', fontSize: 16 },
   teacherReservationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
     padding: 12,
     borderRadius: 12,
     marginTop: 12,
@@ -533,11 +488,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFD580',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
   },
   uploadBtnDisabled: { opacity: 0.4 },
-  uploadBtnText: { color: '#1B1E36', fontWeight: '800' },
+  uploadBtnText: { color: '#3730A3', fontWeight: '800' },
 });

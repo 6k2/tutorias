@@ -1,348 +1,101 @@
-// Home screen aka vibes central xd
-// Shows hero banner, subject cards, and quick actions.
-// Teachers can go to Matricular from here to post their offer.
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "expo-router";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  Animated,
-  useWindowDimensions,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { auth, db } from "../config/firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { useTopAlert } from "../../components/TopAlert";
+import React, { useMemo } from 'react';
+import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
+import { MaterialIcons } from '@expo/vector-icons';
+import { db } from '../config/firebase';
+import { useTopAlert } from '../../components/TopAlert';
+import { useSession } from '../../contexts/AuthContext';
+import { Badge, Button, Card, Page } from '../../components/ui/Primitives';
+import { tokens } from '../../components/ui/tokens';
+
+const subjects = [
+  { key: 'calculo', title: 'Cálculo', tag: 'STEM', image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=1600&auto=format&fit=crop' },
+  { key: 'software', title: 'Software', tag: 'Código', image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1600&auto=format&fit=crop' },
+  { key: 'biologia', title: 'Biología', tag: 'Ciencias', image: 'https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg' },
+  { key: 'algebra', title: 'Álgebra', tag: 'Matemática', image: 'https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg' },
+  { key: 'ingles', title: 'Inglés', tag: 'Idiomas', image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop' },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [role, setRole] = useState("");
-  const [uid, setUid] = useState("");
   const topAlert = useTopAlert();
+  const session = useSession();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
+  const metrics = useMemo(() => [{ label: 'Materias', value: '5+' }, { label: 'Reserva', value: 'Pago mock' }, { label: 'Offline', value: 'Ready' }], []);
 
-  useEffect(() => {
-    const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('../config/firebase').auth, async (u) => {
-      setIsAuthed(!!u);
-      setUid(u?.uid || "");
-      if (u) {
-        try {
-          const ref = doc(db, 'users', u.uid);
-          const snap = await getDoc(ref);
-          const d = snap.data() || {};
-          setRole(d.role || "");
-        } catch {}
-      } else {
-        setRole("");
+  const handleTeacherOffer = async (subject) => {
+    try {
+      if (!session.user?.uid) {
+        topAlert.show('Inicia sesión para publicar una tutoría.', 'info');
+        return;
       }
-      setAuthChecked(true);
-    });
-    return () => unsub();
-  }, []);
-
-  // Static list of subjects we show on the home feed
-  const subjects = useMemo(
-    () => [
-      {
-        key: "calculo",
-        title: "Cálculo",
-        image:
-          "https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=1600&auto=format&fit=crop",
-      },
-      {
-        key: "software",
-        title: "Software",
-        image:
-          "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1600&auto=format&fit=crop",
-      },
-      {
-        key: "biologia",
-        title: "Biología",
-        image:
-          "https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg",
-      },
-      {
-        key: "algebra",
-        title: "Álgebra",
-        image:
-          "https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg",
-      },
-      {
-        key: "ingles",
-        title: "Inglés",
-        image:
-          "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
-      },
-    ],
-    []
-  );
-
-  const cardAnims = useRef(subjects.map(() => new Animated.Value(0))).current;
-  const cardYs = useRef(Array(subjects.length).fill(undefined)).current;
-  const cardShown = useRef(Array(subjects.length).fill(false)).current;
-  const scrollYRef = useRef(0);
-
-  const maybeAnimateVisible = () => {
-    const viewportBottom = windowHeight + scrollYRef.current;
-    subjects.forEach((_, i) => {
-      const cardY = cardYs[i];
-      if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
-        cardShown[i] = true;
-        Animated.timing(cardAnims[i], {
-          toValue: 1,
-          duration: 450,
-          useNativeDriver: false,
-        }).start();
+      const uid = session.user.uid;
+      const id = `${uid}_${subject.key}`;
+      const snap1 = await getDoc(doc(db, 'offers', id));
+      const snap2 = await getDoc(doc(db, 'users', uid, 'offers', subject.key));
+      if (snap1.exists() || snap2.exists()) {
+        topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
+        return;
       }
-    });
+    } catch {
+      // si la verificación falla, mantenemos el flujo existente y dejamos que la pantalla siguiente valide
+    }
+    router.push(`/matricula/${encodeURIComponent(subject.key)}?name=${encodeURIComponent(subject.title)}`);
   };
 
-  // Animate cards when they enter the viewport (fade/slide in).
-  const onScroll = (e) => {
-    const y = e?.nativeEvent?.contentOffset?.y || 0;
-    scrollYRef.current = y;
-    maybeAnimateVisible();
-  };
-  // Run once after mount to animate above-the-fold cards
-  useEffect(() => {
-    const id = requestAnimationFrame(() => maybeAnimateVisible());
-    return () => cancelAnimationFrame(id);
-  }, [windowHeight]);
-  // Detect small screens to adjust some styles
-  const isSmall = windowHeight < 680 || windowWidth < 360;
-  return ( // Main container view with background color
-    <View style={styles.screen}>
-      <Animated.ScrollView
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingBottom: 40 }}
-      >
-        {/* Hero con gradiente */}
-        <LinearGradient
-          colors={["#FF8E53", "#FF7F50", "#1B1E36"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
-        >
-          <Text style={[styles.heroTitle, isSmall && { fontSize: 34 }]}>TUTORIAS</Text>
-          <Text style={[styles.heroSubtitle, isSmall && { fontSize: 12 }]}>Reserva clases, edita tu perfil y chatea</Text>
-          {authChecked && !isAuthed && (
-            <View style={[styles.heroActions, isSmall && { flexWrap: 'wrap' }]}>
-              <TouchableOpacity
-                style={[styles.heroBtn, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
-                onPress={() => router.push("/login")}
-              >
-                <Text style={styles.heroBtnText}>Iniciar sesión</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => router.push("/signup")}
-                style={[styles.ctaGradientBtn, isSmall && { marginTop: 8 }]}
-                activeOpacity={0.9}
-              >
-                <LinearGradient
-                  colors={["#34D399", "#10B981"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.ctaGradientBg, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
-                >
-                  <Text style={styles.ctaGradientText}>Registrarme</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          )}
-        </LinearGradient>
-
-        {/* Lista de materias */}
-        <View style={styles.listContainer}>
-          <Text style={styles.sectionTitle}>Materias</Text>
-
-          {subjects.map((s, i) => {
-            const anim = cardAnims[i];
-            return (
-              <Animated.View
-                key={s.key}
-                style={[
-                  styles.card,
-                  {
-                    opacity: anim,
-                    transform: [
-                      {
-                        translateY: anim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [16, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-                onLayout={(e) => {
-                  const y = e.nativeEvent.layout.y;
-                  cardYs[i] = y;
-                  maybeAnimateVisible();
-                }}
-              >
-                <Image source={{ uri: s.image }} style={styles.cardImage} resizeMode="cover" />
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>{s.title}</Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity
-                      style={styles.inspectBtn}
-                      onPress={() => router.push(`/inspect/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`)}
-                    >
-                      <Text style={styles.inspectText}>INSPECCIONAR</Text>
-                    </TouchableOpacity>
-{(role || '').toLowerCase() === 'teacher' && (
-                      <TouchableOpacity
-                        style={styles.matricularBtn}
-                        onPress={async () => {
-                          try {
-                            if (!uid) {
-                              topAlert.show('Debes iniciar sesión para acceder a: Matricula', 'info');
-                              return;
-                            }
-                            const id = `${uid}_${s.key}`;
-                            const snap1 = await getDoc(doc(db, 'offers', id));
-                            const snap2 = await getDoc(doc(db, 'users', uid, 'offers', s.key));
-                            if (snap1.exists() || snap2.exists()) {
-                              topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
-                              return;
-                            }
-                            router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`);
-                          } catch {
-                            router.push(`/matricula/${encodeURIComponent(s.key)}?name=${encodeURIComponent(s.title)}`);
-                          }
-                        }}
-                      >
-                        <LinearGradient colors={["#34D399", "#10B981"]} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.matricularBg}>
-                          <Text style={styles.inspectText}>MATRICULAR</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </Animated.View>
-            );
-          })}
+  return (
+    <Page contentStyle={[styles.content, isDesktop && styles.desktopContent]}>
+      <LinearGradient colors={['#111827', '#312E81', '#4F46E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+        <View style={styles.heroCopy}>
+          <Badge tone="amber">Plataforma de tutorías</Badge>
+          <Text style={styles.heroTitle}>Aprende con docentes disponibles, reserva y paga en minutos.</Text>
+          <Text style={styles.heroSubtitle}>Una experiencia web-first para explorar clases, administrar reservas y coordinar materiales o chats desde un workspace claro.</Text>
+          <View style={styles.actions}>
+            {!session.isAuthenticated && <Button icon="login" onPress={() => router.push('/login')}>Iniciar sesión</Button>}
+            <Button variant="secondary" icon="search" onPress={() => router.push('/inspect/calculo?name=Cálculo')}>Explorar clases</Button>
+          </View>
         </View>
-      </Animated.ScrollView>
-    </View>
+        <Card style={styles.heroPanel}>
+          <Text style={styles.panelKicker}>Workspace</Text>
+          <Text style={styles.panelTitle}>Vista rápida</Text>
+          {metrics.map((item) => <View key={item.label} style={styles.metricLine}><Text style={styles.metricLabel}>{item.label}</Text><Text style={styles.metricValue}>{item.value}</Text></View>)}
+        </Card>
+      </LinearGradient>
+
+      <View style={styles.sectionHeader}>
+        <View>
+          <Text style={styles.sectionTitle}>Explora por materia</Text>
+          <Text style={styles.sectionSubtitle}>Cards compactas, visuales y preparadas para escritorio. Las imágenes existentes se mantienen como fuente.</Text>
+        </View>
+        {session.role === 'teacher' && <Badge tone="green">Modo docente</Badge>}
+      </View>
+
+      <View style={[styles.grid, isDesktop ? styles.gridDesktop : styles.gridMobile]}>
+        {subjects.map((subject) => (
+          <Card key={subject.key} padded={false} style={styles.subjectCard}>
+            <Image source={{ uri: subject.image }} style={styles.cardImage} resizeMode="cover" />
+            <View style={styles.cardBody}>
+              <View style={styles.cardTop}><Badge>{subject.tag}</Badge><MaterialIcons name="north-east" size={18} color={tokens.color.brand} /></View>
+              <Text style={styles.cardTitle}>{subject.title}</Text>
+              <Text style={styles.cardText}>Encuentra docentes, horarios y cupos activos para esta materia.</Text>
+              <View style={styles.cardActions}>
+                <Button style={{ flex: 1 }} icon="visibility" onPress={() => router.push(`/inspect/${encodeURIComponent(subject.key)}?name=${encodeURIComponent(subject.title)}`)}>Ver clases</Button>
+                {session.role === 'teacher' && <Button variant="secondary" icon="add" onPress={() => handleTeacherOffer(subject)}>Publicar</Button>}
+              </View>
+            </View>
+          </Card>
+        ))}
+      </View>
+    </Page>
   );
 }
-// Styles for the HomeScreen component
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#1B1E36",
-  },
-  hero: {
-    paddingTop: 80,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  heroTitle: {
-    fontSize: 48,
-    color: "#fff",
-    fontWeight: "800",
-    letterSpacing: 2,
-  },
-  heroSubtitle: {
-    color: "#f0f0f0",
-    marginTop: 8,
-    fontSize: 14,
-  },
-  heroActions: {
-    flexDirection: "row",
-    marginTop: 20,
-    gap: 12,
-  },
-  heroBtn: {
-    backgroundColor: "#2C2F48",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-  },
-  heroBtnOutline: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#FF8E53",
-  },
-  heroBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  ctaGradientBtn: {
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  ctaGradientBg: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-  },
-  ctaGradientText: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    gap: 12,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  card: {
-    backgroundColor: "#2C2F48",
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  cardImage: {
-    width: "100%",
-    height: 160,
-    backgroundColor: "#1B1E36",
-  },
-  cardBody: {
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  inspectBtn: {
-    backgroundColor: "#FF8E53",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-  },
-  inspectText: {
-    color: "#fff",
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  matricularBtn: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  matricularBg: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-  },
-});
 
+const styles = StyleSheet.create({
+  content: { paddingBottom: 110 }, desktopContent: { paddingLeft: 284, maxWidth: 1420 },
+  hero: { borderRadius: 36, padding: 30, minHeight: 360, flexDirection: 'row', gap: 24, overflow: 'hidden', alignItems: 'stretch' }, heroCopy: { flex: 1, justifyContent: 'center' }, heroTitle: { color: '#fff', fontSize: 54, lineHeight: 58, fontWeight: '900', maxWidth: 760, marginTop: 18 }, heroSubtitle: { color: '#DDE3FF', fontSize: 17, lineHeight: 27, maxWidth: 680, marginTop: 16 }, actions: { flexDirection: 'row', gap: 12, marginTop: 26, flexWrap: 'wrap' }, heroPanel: { width: 320, backgroundColor: 'rgba(255,255,255,.96)', alignSelf: 'center' }, panelKicker: { color: tokens.color.brand, fontWeight: '900', textTransform: 'uppercase' }, panelTitle: { color: tokens.color.ink, fontSize: 28, fontWeight: '900', marginVertical: 14 }, metricLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13, borderTopWidth: 1, borderTopColor: tokens.color.line }, metricLabel: { color: tokens.color.muted, fontWeight: '800' }, metricValue: { color: tokens.color.ink, fontWeight: '900' },
+  sectionHeader: { marginTop: 12, flexDirection: 'row', justifyContent: 'space-between', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }, sectionTitle: { color: tokens.color.ink, fontSize: 30, fontWeight: '900' }, sectionSubtitle: { color: tokens.color.muted, marginTop: 6 },
+  grid: { gap: 18 }, gridDesktop: { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }, gridMobile: {}, subjectCard: { overflow: 'hidden' }, cardImage: { width: '100%', height: 180, backgroundColor: tokens.color.brandSoft }, cardBody: { padding: 18, gap: 12 }, cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardTitle: { color: tokens.color.ink, fontSize: 24, fontWeight: '900' }, cardText: { color: tokens.color.muted, lineHeight: 21 }, cardActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+});

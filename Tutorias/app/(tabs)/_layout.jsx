@@ -1,14 +1,15 @@
 // Tab layout: controls the bottom tabs and guards access with cute alerts xd
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { auth } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
 import CustomTabBar from '../../components/CustomTabBar';
 import { IconSymbol } from '../../components/ui/IconSymbol';
+import { useSession } from '../../contexts/AuthContext';
 
 export default function TabLayout() {
   // We show a custom bottom bar and block tabs that need login
   const topAlert = useTopAlert();
+  const session = useSession();
 
   return (
     <Tabs
@@ -23,10 +24,10 @@ export default function TabLayout() {
           ),
           listeners: {
             tabPress: (e) => {
-              if (!auth.currentUser) {
+              if (!session.isAuthenticated) {
                 e.preventDefault();
                 topAlert.show(
-                  'Debes iniciar sesión/Registrarme para acceder a: Perfil',
+                  'Inicia sesión para abrir tu perfil',
                   'info'
                 );
               }
@@ -56,10 +57,10 @@ export default function TabLayout() {
           ),
           listeners: {
             tabPress: (e) => {
-              if (!auth.currentUser) {
+              if (!session.isAuthenticated) {
                 e.preventDefault();
                 topAlert.show(
-                  'Debes iniciar sesión/Registrarme para acceder a: Chats',
+                  'Inicia sesión para usar los chats',
                   'info'
                 );
               }

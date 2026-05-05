@@ -1,306 +1,66 @@
+import React, { useState } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useRouter } from 'expo-router';
+import { createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { MaterialIcons } from '@expo/vector-icons';
+import { auth, db } from './config/firebase';
+import { Button, Card, Field } from '../components/ui/Primitives';
+import { tokens } from '../components/ui/tokens';
 
-// Signup screen: pick your vibe (Student/Teacher), set username/email, and go, xd
-
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  ActivityIndicator,
-} from "react-native";
-import { useRouter } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
-import { auth, db } from "./config/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+const roles = [{ key: 'Student', label: 'Estudiante', icon: 'school', text: 'Reserva tutorías y descarga materiales.' }, { key: 'Teacher', label: 'Docente', icon: 'workspace-premium', text: 'Publica clases y gestiona solicitudes.' }];
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
   const [role, setRole] = useState(null);
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  React.useEffect(() => {
-    const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('./config/firebase').auth, (u) => {
-      if (u) router.replace('/');
-    });
-    return () => unsub();
-  }, [router]);
-
-
-  // Create the account and store a basic user profile in Firestore
+  React.useEffect(() => onAuthStateChanged(auth, (u) => { if (u) router.replace('/'); }), [router]);
 
   const onSignup = async () => {
+    setError(null);
+    if (!role) return setError('Selecciona un tipo de cuenta.');
+    if (!username.trim()) return setError('Ingresa tu nombre.');
+    if (!email.trim()) return setError('Ingresa un email válido.');
+    if (password.length < 6) return setError('La contraseña debe tener mínimo 6 caracteres.');
+    if (password !== confirmPassword) return setError('Las contraseñas no coinciden.');
     try {
-      setError(null);
-      if (!role) {
-        setError("Selecciona un rol");
-        return;
-      }
-      if (!username.trim()) {
-        setError("Ingresa un nombre de usuario");
-        return;
-      }
-      if (!email.trim()) {
-        setError("Ingresa un email válido");
-        return;
-      }
-      if (password.length < 6) {
-        setError("Contraseña débil (mínimo 6 caracteres)");
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError("Las contraseñas no coinciden");
-        return;
-      }
-
       setLoading(true);
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const uid = cred.user.uid;
-
-      await setDoc(doc(db, "users", uid), {
-        uid,
-        email,
-        username: username.trim(),
-        role,
-        createdAt: serverTimestamp(),
-      });
-
-      router.replace("/");
+      await setDoc(doc(db, 'users', cred.user.uid), { uid: cred.user.uid, email, username: username.trim(), role, createdAt: serverTimestamp() });
+      router.replace('/');
     } catch (e) {
-      let msg = "No se pudo crear la cuenta";
-      if (e?.code === "auth/email-already-in-use") msg = "El email ya está en uso";
-      if (e?.code === "auth/invalid-email") msg = "Email inválido";
-      if (e?.code === "auth/weak-password") msg = "Contraseña débil";
-      if (e?.code === "auth/operation-not-allowed") msg = "Habilita Email/Password en Firebase Auth";
-      if (e?.code === "auth/network-request-failed") msg = "Sin red o bloqueado por CORS";
+      let msg = 'No se pudo crear la cuenta.';
+      if (e?.code === 'auth/email-already-in-use') msg = 'El email ya está en uso.';
+      if (e?.code === 'auth/invalid-email') msg = 'Email inválido.';
+      if (e?.code === 'auth/weak-password') msg = 'Contraseña débil.';
       setError(msg);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sign up</Text>
-
-      <Text style={styles.subtitle}>TELL US ABOUT YOU :D</Text>
-
-
-      {/* Choose your role. This decides what features you get later */}
-
-      <View style={styles.roles}>
-        <TouchableOpacity onPress={() => setRole("Student")}>
-          <Image
-            source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/user-female.png" }}
-            tintColor="#fff"
-            style={[styles.roleIcon, role === "Student" && styles.selectedRole]}
-          />
-          <Text style={styles.roleText}>Student</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => setRole("Teacher")}>
-          <Image
-            source={{ uri: "https://img.icons8.com/ios-filled/100/ffffff/teacher.png" }}
-            tintColor="#fff"
-            style={[styles.roleIcon, role === "Teacher" && styles.selectedRole]}
-          />
-          <Text style={styles.roleText}>Teacher</Text>
-        </TouchableOpacity>
+    <View style={styles.page}>
+      <View style={[styles.shell, !isDesktop && styles.shellMobile]}>
+        <Card style={styles.formCard}>
+          <Text style={styles.kicker}>Nueva cuenta</Text><Text style={styles.title}>Crea tu workspace</Text><Text style={styles.subtitle}>Elige tu perfil y empieza con una experiencia enfocada en web.</Text>
+          <View style={styles.roleGrid}>{roles.map((item) => <TouchableOpacity key={item.key} onPress={() => setRole(item.key)} style={[styles.roleCard, role === item.key && styles.roleActive]}><MaterialIcons name={item.icon} size={24} color={role === item.key ? '#fff' : tokens.color.brand} /><Text style={[styles.roleTitle, role === item.key && styles.roleActiveText]}>{item.label}</Text><Text style={[styles.roleText, role === item.key && styles.roleActiveText]}>{item.text}</Text></TouchableOpacity>)}</View>
+          <Field label="Nombre" icon="person" placeholder="María Pérez" value={username} onChangeText={setUsername} />
+          <Field label="Email" icon="mail" placeholder="tu@email.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+          <View style={styles.twoCols}><Field style={{ flex: 1 }} label="Contraseña" icon="lock" placeholder="Mín. 6 caracteres" secureTextEntry value={password} onChangeText={setPassword} /><Field style={{ flex: 1 }} label="Confirmar" icon="lock-outline" placeholder="Repite contraseña" secureTextEntry value={confirmPassword} onChangeText={setConfirmPassword} /></View>
+          {error ? <View style={styles.errorBox}><MaterialIcons name="error" size={18} color="#B91C1C" /><Text style={styles.errorText}>{error}</Text></View> : null}
+          <Button loading={loading} onPress={onSignup}>Crear cuenta</Button>
+          <Text style={styles.footer}>¿Ya tienes cuenta? <Text style={styles.link} onPress={() => router.push('/login')}>Inicia sesión</Text></Text>
+        </Card>
+        {isDesktop && <View style={styles.aside}><Text style={styles.asideTitle}>Diseñado para aprender, enseñar y coordinar mejor.</Text><Text style={styles.asideText}>Publica clases, revisa cupos, paga de forma mock y continúa con chat o materiales sin perder contexto.</Text></View>}
       </View>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="#aaa"
-        value={username}
-        onChangeText={setUsername}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={[styles.input, { paddingRight: 44 }]}
-          placeholder="Password"
-          placeholderTextColor="#aaa"
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          onPress={() => setShowPassword((v) => !v)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={[styles.input, { paddingRight: 44 }]}
-          placeholder="Confirm Password"
-          placeholderTextColor="#aaa"
-          secureTextEntry={!showConfirmPassword}
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-        />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          onPress={() => setShowConfirmPassword((v) => !v)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons name={showConfirmPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
-        </TouchableOpacity>
-      </View>
-
-      {error && (
-        <View style={styles.errorBox}>
-          <MaterialIcons name="dangerous" size={20} color="#b71c1c" style={{ marginRight: 8 }} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      <TouchableOpacity style={[styles.signupBtn, loading && { opacity: 0.7 }]} onPress={onSignup} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.signupText}>SIGNUP</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={styles.footer}>
-        Already have an account?{' '}
-        <Text
-          style={styles.loginLink}
-          onPress={() => router.push("/login")}
-        >
-          Login here
-        </Text>
-      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1B1E36",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 32,
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#aaa",
-    marginBottom: 20,
-  },
-  roles: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 20,
-  },
-  roleIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 5,
-    alignSelf: "center",
-  },
-  selectedRole: {
-    borderWidth: 2,
-    borderColor: "#FF7F50",
-  },
-  roleText: {
-    color: "#fff",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  input: {
-    width: "100%",
-    backgroundColor: "#2C2F48",
-    borderRadius: 10,
-    padding: 15,
-    marginVertical: 8,
-    color: "#fff",
-  },
-  inputWrapper: {
-    width: '100%',
-    position: 'relative',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 12,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  signupBtn: {
-    backgroundColor: "#FF8E53",
-    width: "100%",
-    padding: 15,
-    borderRadius: 30,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  signupText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  footer: {
-    marginTop: 20,
-    color: "#aaa",
-  },
-  loginLink: {
-    color: "#FF8E53",
-    fontWeight: "bold",
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fdecea',
-    borderColor: '#f5c2c7',
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginTop: 10,
-    width: '100%',
-  },
-  errorText: {
-    color: '#b71c1c',
-    flexShrink: 1,
-    fontSize: 14,
-  },
-});
-
+const styles = StyleSheet.create({ page: { flex: 1, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', padding: 24 }, shell: { width: '100%', maxWidth: 1180, flexDirection: 'row', gap: 24 }, shellMobile: { maxWidth: 560 }, formCard: { flex: 1.1, gap: 15, padding: 32 }, aside: { flex: .9, borderRadius: 34, backgroundColor: '#111827', padding: 38, justifyContent: 'flex-end' }, asideTitle: { color: '#fff', fontSize: 46, lineHeight: 50, fontWeight: '900' }, asideText: { color: '#CBD5E1', marginTop: 18, fontSize: 17, lineHeight: 27 }, kicker: { color: tokens.color.brand, fontWeight: '900', textTransform: 'uppercase' }, title: { color: tokens.color.ink, fontSize: 38, fontWeight: '900' }, subtitle: { color: tokens.color.muted, lineHeight: 22 }, roleGrid: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }, roleCard: { flex: 1, minWidth: 190, borderWidth: 1, borderColor: tokens.color.line, borderRadius: 18, padding: 16, gap: 7, backgroundColor: '#fff' }, roleActive: { backgroundColor: tokens.color.brand, borderColor: tokens.color.brand }, roleTitle: { color: tokens.color.ink, fontWeight: '900', fontSize: 16 }, roleText: { color: tokens.color.muted, lineHeight: 19 }, roleActiveText: { color: '#fff' }, twoCols: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' }, errorBox: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', padding: 12, borderRadius: 14 }, errorText: { color: '#B91C1C', fontWeight: '700', flex: 1 }, footer: { color: tokens.color.muted, textAlign: 'center', fontWeight: '700' }, link: { color: tokens.color.brand, fontWeight: '900' } });

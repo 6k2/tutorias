@@ -3,15 +3,18 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TopAlertProvider } from '../components/TopAlert';
+import { AuthProvider } from '../contexts/AuthContext';
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <TopAlertProvider>
+        <AuthProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
+        </AuthProvider>
       </TopAlertProvider>
     </SafeAreaProvider>
   );

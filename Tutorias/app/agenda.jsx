@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -48,6 +48,8 @@ const formatSlot = (slot) => {
 
 export default function AgendaScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const topAlert = useTopAlert();
@@ -182,8 +184,8 @@ export default function AgendaScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: '#1B1E36' }}
-      contentContainerStyle={{ padding: 16, paddingTop: (insets?.top ?? 0) + 12 }}
+      style={{ flex: 1, backgroundColor: '#F6F7FB' }}
+      contentContainerStyle={{ padding: 24, paddingBottom: 120, paddingTop: (insets?.top ?? 0) + 24, paddingLeft: isDesktop ? 284 : 24, maxWidth: isDesktop ? 1420 : undefined, alignSelf: 'center', width: '100%' }}
     >
       <View style={{ alignSelf: 'stretch', marginBottom: 8, zIndex: 10, position: 'relative' }}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -205,7 +207,7 @@ export default function AgendaScreen() {
 
       {loadingState && (
         <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color="#FFD580" />
+          <ActivityIndicator size="small" color="#EEF2FF" />
           <Text style={styles.loadingText}>Preparando agenda...</Text>
         </View>
       )}
@@ -243,6 +245,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -260,6 +267,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -349,6 +361,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Estudiante: {item.studentDisplayName || item.studentId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -363,42 +380,42 @@ export default function AgendaScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: { color: '#fff', fontSize: 26, fontWeight: '800', marginBottom: 8 },
+  title: { color: '#111827', fontSize: 42, fontWeight: '800', marginBottom: 8 },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFD580',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     alignSelf: 'flex-start',
   },
-  backText: { color: '#1B1E36', fontWeight: '800' },
+  backText: { color: '#3730A3', fontWeight: '800' },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
-  loadingText: { color: '#C7C9D9' },
-  emptyText: { color: '#C7C9D9', marginTop: 10 },
-  sectionTitle: { color: '#fff', fontWeight: '800', marginBottom: 8 },
+  loadingText: { color: '#64748B' },
+  emptyText: { color: '#64748B', marginTop: 10 },
+  sectionTitle: { color: '#111827', fontWeight: '800', marginBottom: 8 },
   card: {
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
   },
-  cardTitle: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  cardSubtitle: { color: '#C7C9D9', marginTop: 4 },
-  cardSlot: { color: '#FFD580', marginTop: 8, fontWeight: '700' },
-  cardStatus: { color: '#C7C9D9', marginTop: 6 },
+  cardTitle: { color: '#111827', fontWeight: '800', fontSize: 16 },
+  cardSubtitle: { color: '#64748B', marginTop: 4 },
+  cardSlot: { color: '#EEF2FF', marginTop: 8, fontWeight: '700' },
+  cardStatus: { color: '#64748B', marginTop: 6 },
   badge: {
-    backgroundColor: '#FF8E53',
+    backgroundColor: '#4F46E5',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  badgeText: { color: '#1B1E36', fontWeight: '800' },
+  badgeText: { color: '#F6F7FB', fontWeight: '800' },
   tabRow: {
     flexDirection: 'row',
-    backgroundColor: '#2C2F48',
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 6,
     gap: 6,
@@ -413,16 +430,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  tabBtnActive: { backgroundColor: '#FF8E53' },
-  tabText: { color: '#C7C9D9', fontWeight: '600' },
-  tabTextActive: { color: '#1B1E36', fontWeight: '800' },
+  tabBtnActive: { backgroundColor: '#4F46E5' },
+  tabText: { color: '#64748B', fontWeight: '600' },
+  tabTextActive: { color: '#fff', fontWeight: '800' },
   tabBadge: {
-    backgroundColor: '#1B1E36',
+    backgroundColor: '#F6F7FB',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  tabBadgeText: { color: '#FFD580', fontWeight: '700', fontSize: 12 },
+  tabBadgeText: { color: '#4F46E5', fontWeight: '700', fontSize: 12 },
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   acceptBtn: { backgroundColor: '#DCFCE7' },
@@ -441,6 +458,15 @@ const styles = StyleSheet.create({
   },
   offlineBadgeText: { color: '#ffedd5', fontWeight: '700' },
   syncingText: { color: '#9ca3af', marginBottom: 10 },
+  paymentBadge: {
+    marginTop: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#DCFCE7',
+    alignSelf: 'flex-start',
+  },
+  paymentBadgeText: { color: '#166534', fontWeight: '900', fontSize: 12 },
   syncBadge: {
     marginTop: 10,
     paddingVertical: 4,
@@ -449,5 +475,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#f97316',
     alignSelf: 'flex-start',
   },
-  syncBadgeText: { color: '#1B1E36', fontWeight: '800', fontSize: 12 },
+  syncBadgeText: { color: '#F6F7FB', fontWeight: '800', fontSize: 12 },
 });

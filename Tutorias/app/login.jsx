@@ -1,207 +1,74 @@
-// Login screen: quick sign-in with email + password, clean and simple, xd
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-} from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { useTopAlert } from "../components/TopAlert";
-import { auth } from "./config/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { MaterialIcons } from "@expo/vector-icons";
+import React, { useState } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { MaterialIcons } from '@expo/vector-icons';
+import { auth } from './config/firebase';
+import { useTopAlert } from '../components/TopAlert';
+import { Button, Card, Field } from '../components/ui/Primitives';
+import { tokens } from '../components/ui/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const topAlert = useTopAlert();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width >= 900;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  React.useEffect(() => onAuthStateChanged(auth, (u) => { if (u) router.replace('/'); }), [router]);
   React.useEffect(() => {
-    const { onAuthStateChanged } = require('firebase/auth');
-    const unsub = onAuthStateChanged(require('./config/firebase').auth, (u) => {
-      if (u) router.replace('/');
-    });
-    return () => unsub();
-  }, [router]);
-
-  React.useEffect(() => {
-    const dest = params?.dest || 'esta sección';
-    const should = params?.alert === 'needAuth';
-    let t;
-    if (should) {
-      t = setTimeout(() => {
-        topAlert.show(`Debes iniciar sesión/Registrarme para acceder a: ${dest}`, 'info');
-      }, 1200);
+    if (params?.alert === 'needAuth') {
+      const t = setTimeout(() => topAlert.show(`Inicia sesión para acceder a ${params?.dest || 'esta sección'}.`, 'info'), 600);
+      return () => clearTimeout(t);
     }
-    return () => clearTimeout(t);
-  }, [params]);
+    return undefined;
+  }, [params, topAlert]);
 
-  // Try to log in; shows friendly error messages if anything is off
   const onLogin = async () => {
+    setError(null);
+    if (!email.trim()) return setError('Ingresa un email válido.');
+    if (!password) return setError('Ingresa tu contraseña.');
     try {
-      setError(null);
-      if (!email.trim()) {
-        setError("Ingresa un email válido");
-        return;
-      }
-      if (!password) {
-        setError("Ingresa tu contraseña");
-        return;
-      }
       setLoading(true);
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace("/");
+      router.replace('/');
     } catch (e) {
-      let msg = "No se pudo iniciar sesión";
-      if (e?.code === "auth/invalid-credential") msg = "Credenciales inválidas";
-      if (e?.code === "auth/user-not-found") msg = "Usuario no encontrado";
-      if (e?.code === "auth/wrong-password") msg = "Contraseña incorrecta";
-      if (e?.code === "auth/too-many-requests") msg = "Demasiados intentos, inténtalo más tarde";
+      let msg = 'No se pudo iniciar sesión.';
+      if (e?.code === 'auth/invalid-credential') msg = 'Credenciales inválidas.';
+      if (e?.code === 'auth/too-many-requests') msg = 'Demasiados intentos. Inténtalo más tarde.';
       setError(msg);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      {/* Password field with eye icon to show/hide, because convenience ftw xd */}
-      <View style={styles.inputWrapper}>
-        <TextInput
-          style={[styles.input, { paddingRight: 44 }]}
-          placeholder="Password"
-          placeholderTextColor="#aaa"
-          secureTextEntry={!showPassword}
-          value={password}
-          onChangeText={setPassword}
-        />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          onPress={() => setShowPassword((v) => !v)}
-          style={styles.eyeIcon}
-        >
-          <MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={22} color="#bbb" />
-        </TouchableOpacity>
+    <View style={styles.page}>
+      <View style={[styles.shell, !isDesktop && styles.shellMobile]}>
+        {isDesktop && <View style={styles.story}><Text style={styles.brand}>Tutorias</Text><Text style={styles.storyTitle}>Tu plataforma de aprendizaje, ahora con experiencia web premium.</Text><Text style={styles.storyText}>Gestiona reservas, pagos mock, chats y materiales desde un workspace claro y profesional.</Text></View>}
+        <Card style={styles.formCard}>
+          <Text style={styles.kicker}>Bienvenido de vuelta</Text>
+          <Text style={styles.title}>Inicia sesión</Text>
+          <Text style={styles.subtitle}>Accede a tus clases, reservas y mensajes.</Text>
+          <Field label="Email" icon="mail" placeholder="tu@email.com" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
+          <View style={{ position: 'relative' }}>
+            <Field label="Contraseña" icon="lock" placeholder="••••••••" secureTextEntry={!showPassword} value={password} onChangeText={setPassword} />
+            <TouchableOpacity style={styles.eye} onPress={() => setShowPassword((v) => !v)}><MaterialIcons name={showPassword ? 'visibility' : 'visibility-off'} size={20} color={tokens.color.muted} /></TouchableOpacity>
+          </View>
+          {error ? <View style={styles.errorBox}><MaterialIcons name="error" size={18} color="#B91C1C" /><Text style={styles.errorText}>{error}</Text></View> : null}
+          <Button loading={loading} onPress={onLogin}>Entrar al workspace</Button>
+          <Text style={styles.footer}>¿No tienes cuenta? <Text style={styles.link} onPress={() => router.push('/signup')}>Crear cuenta</Text></Text>
+        </Card>
       </View>
-
-      {error && (
-        <View style={styles.errorBox}>
-          <MaterialIcons name="dangerous" size={20} color="#b71c1c" style={{ marginRight: 8 }} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      <TouchableOpacity style={[styles.signupBtn, loading && { opacity: 0.7 }]} onPress={onLogin} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.signupText}>LOGIN</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={styles.footer}>
-        Don’t have an account?{' '}
-        <Text style={styles.loginLink} onPress={() => router.push("/signup")}>
-          Sign up here
-        </Text>
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1B1E36",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 32,
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  subtitle: { display: 'none' },
-  input: {
-    width: "100%",
-    backgroundColor: "#2C2F48",
-    borderRadius: 10,
-    padding: 15,
-    marginVertical: 8,
-    color: "#fff",
-  },
-  inputWrapper: {
-    width: '100%',
-    position: 'relative',
-  },
-  eyeIcon: {
-    position: 'absolute',
-    right: 12,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-  },
-  signupBtn: {
-    backgroundColor: "#FF8E53",
-    width: "100%",
-    padding: 15,
-    borderRadius: 30,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  signupText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  footer: {
-    marginTop: 20,
-    color: "#aaa",
-  },
-  loginLink: {
-    color: "#FF8E53",
-    fontWeight: "bold",
-  },
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fdecea',
-    borderColor: '#f5c2c7',
-    borderWidth: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginTop: 10,
-    width: '100%',
-  },
-  errorText: {
-    color: '#b71c1c',
-    flexShrink: 1,
-    fontSize: 14,
-  },
+  page: { flex: 1, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', padding: 24 }, shell: { width: '100%', maxWidth: 1120, minHeight: 640, flexDirection: 'row', gap: 24 }, shellMobile: { maxWidth: 520, minHeight: 0 },
+  story: { flex: 1.1, borderRadius: 34, backgroundColor: tokens.color.dark, padding: 38, justifyContent: 'flex-end' }, brand: { color: '#A5B4FC', fontWeight: '900', fontSize: 20, marginBottom: 90 }, storyTitle: { color: '#fff', fontWeight: '900', fontSize: 48, lineHeight: 52 }, storyText: { color: '#CBD5E1', fontSize: 17, lineHeight: 27, marginTop: 18 },
+  formCard: { flex: 0.9, justifyContent: 'center', gap: 16, padding: 34 }, kicker: { color: tokens.color.brand, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 }, title: { color: tokens.color.ink, fontSize: 38, fontWeight: '900' }, subtitle: { color: tokens.color.muted, lineHeight: 22, marginBottom: 8 }, eye: { position: 'absolute', right: 14, bottom: 14 }, errorBox: { flexDirection: 'row', gap: 8, alignItems: 'center', backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', padding: 12, borderRadius: 14 }, errorText: { color: '#B91C1C', fontWeight: '700', flex: 1 }, footer: { color: tokens.color.muted, textAlign: 'center', fontWeight: '700' }, link: { color: tokens.color.brand, fontWeight: '900' },
 });
-
