@@ -243,6 +243,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -260,6 +265,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Docente: {item.teacherDisplayName || item.teacherId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -349,6 +359,11 @@ export default function AgendaScreen() {
               <Text style={styles.cardSubtitle}>Estudiante: {item.studentDisplayName || item.studentId}</Text>
               <Text style={styles.cardSlot}>{formatSlot(item.slot)}</Text>
               <Text style={styles.cardStatus}>Estado: {item.statusLabel}</Text>
+              {item.paymentStatus === 'paid_mock' && (
+                <View style={styles.paymentBadge}>
+                  <Text style={styles.paymentBadgeText}>Pago mock aprobado</Text>
+                </View>
+              )}
               {item._pendingSync && (
                 <View style={styles.syncBadge}>
                   <Text style={styles.syncBadgeText}>Pendiente por sincronizar</Text>
@@ -441,6 +456,15 @@ const styles = StyleSheet.create({
   },
   offlineBadgeText: { color: '#ffedd5', fontWeight: '700' },
   syncingText: { color: '#9ca3af', marginBottom: 10 },
+  paymentBadge: {
+    marginTop: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#DCFCE7',
+    alignSelf: 'flex-start',
+  },
+  paymentBadgeText: { color: '#166534', fontWeight: '900', fontSize: 12 },
   syncBadge: {
     marginTop: 10,
     paddingVertical: 4,
