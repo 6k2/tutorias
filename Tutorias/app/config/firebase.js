@@ -50,6 +50,19 @@ let _db;
 if (Platform.OS === "web") {
   _db = getFirestore(app);
 } else {
+<<<<<<< Updated upstream
+=======
+  const nativeFirestoreSettings = {
+    experimentalAutoDetectLongPolling: true,
+    useFetchStreams: false,
+  };
+
+  const withNativeNetworkFixes = (options = {}) => ({
+    ...nativeFirestoreSettings,
+    ...options,
+  });
+
+>>>>>>> Stashed changes
   try {
     _db = initializeFirestore(app, {
       localCache: persistentLocalCache({

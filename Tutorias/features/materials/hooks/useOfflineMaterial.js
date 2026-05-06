@@ -23,6 +23,11 @@ export function useOfflineMaterial({ uid, material }) {
   const [status, setStatus] = useState(STATUS.IDLE);
   const [error, setError] = useState(null);
 
+  const remoteUpdatedAt = useMemo(() => {
+    if (!material) return 0;
+    return toMillis(material.updatedAt) || toMillis(material.createdAt);
+  }, [material]);
+
   useEffect(() => {
     let cancelled = false;
     if (!uid || !material?.id) {
@@ -44,11 +49,6 @@ export function useOfflineMaterial({ uid, material }) {
       cancelled = true;
     };
   }, [uid, material?.id, remoteUpdatedAt]);
-
-  const remoteUpdatedAt = useMemo(() => {
-    if (!material) return 0;
-    return toMillis(material.updatedAt) || toMillis(material.createdAt);
-  }, [material]);
 
   const needsRefresh = useMemo(() => {
     if (!entry?.updatedAt) return false;

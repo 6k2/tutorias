@@ -7,7 +7,13 @@ import { Colors } from '../constants/Colors';
 import { useColorScheme } from './useColorScheme';
 
 export function useThemeColor(props, colorName) {
+<<<<<<< Updated upstream
   const theme = useColorScheme() ?? 'light';
+=======
+  const override = useThemeOverride();
+  const colorScheme = useColorScheme();
+  const theme = override ?? colorScheme ?? 'light';
+>>>>>>> Stashed changes
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
