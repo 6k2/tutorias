@@ -1,69 +1,148 @@
-import React, { useMemo } from 'react';
-import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
-import { MaterialIcons } from '@expo/vector-icons';
-import { db } from '../config/firebase';
-import { useTopAlert } from '../../components/TopAlert';
-import { useSession } from '../../contexts/AuthContext';
-import { Badge, Button, Card, Page } from '../../components/ui/Primitives';
-import { tokens } from '../../components/ui/tokens';
-
-const subjects = [
-  { key: 'calculo', title: 'Cálculo', tag: 'STEM', image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=1600&auto=format&fit=crop' },
-  { key: 'software', title: 'Software', tag: 'Código', image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1600&auto=format&fit=crop' },
-  { key: 'biologia', title: 'Biología', tag: 'Ciencias', image: 'https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg' },
-  { key: 'algebra', title: 'Álgebra', tag: 'Matemática', image: 'https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg' },
-  { key: 'ingles', title: 'Inglés', tag: 'Idiomas', image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop' },
-];
+// Home screen aka vibes central xd
+// Shows hero banner, subject cards, and quick actions.
+// Teachers can go to Matricular from here to post their offer.
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "expo-router";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Animated,
+  useWindowDimensions,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { db } from "../config/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { useTopAlert } from "../../components/TopAlert";
+import { useSession } from "../../contexts/AuthContext";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const topAlert = useTopAlert();
   const session = useSession();
-  const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 900;
-  const metrics = useMemo(() => [{ label: 'Materias', value: '5+' }, { label: 'Reserva', value: 'Pago mock' }, { label: 'Offline', value: 'Ready' }], []);
+  const isAuthed = session.isAuthenticated;
+  const authChecked = session.ready;
+  const role = session.role;
+  const uid = session.user?.uid || "";
 
-  const handleTeacherOffer = async (subject) => {
-    try {
-      if (!session.user?.uid) {
-        topAlert.show('Inicia sesión para publicar una tutoría.', 'info');
-        return;
+  // Static list of subjects we show on the home feed
+  const subjects = useMemo(
+    () => [
+      {
+        key: "calculo",
+        title: "Cálculo",
+        image:
+          "https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=1600&auto=format&fit=crop",
+      },
+      {
+        key: "software",
+        title: "Software",
+        image:
+          "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1600&auto=format&fit=crop",
+      },
+      {
+        key: "biologia",
+        title: "Biología",
+        image:
+          "https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg",
+      },
+      {
+        key: "algebra",
+        title: "Álgebra",
+        image:
+          "https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg",
+      },
+      {
+        key: "ingles",
+        title: "Inglés",
+        image:
+          "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
+      },
+    ],
+    []
+  );
+
+  const cardAnims = useRef(subjects.map(() => new Animated.Value(0))).current;
+  const cardYs = useRef(Array(subjects.length).fill(undefined)).current;
+  const cardShown = useRef(Array(subjects.length).fill(false)).current;
+  const scrollYRef = useRef(0);
+
+  const maybeAnimateVisible = useCallback(() => {
+    const viewportBottom = windowHeight + scrollYRef.current;
+    subjects.forEach((_, i) => {
+      const cardY = cardYs[i];
+      if (!cardShown[i] && typeof cardY === "number" && viewportBottom > cardY + 80) {
+        cardShown[i] = true;
+        Animated.timing(cardAnims[i], {
+          toValue: 1,
+          duration: 450,
+          useNativeDriver: false,
+        }).start();
       }
-      const uid = session.user.uid;
-      const id = `${uid}_${subject.key}`;
-      const snap1 = await getDoc(doc(db, 'offers', id));
-      const snap2 = await getDoc(doc(db, 'users', uid, 'offers', subject.key));
-      if (snap1.exists() || snap2.exists()) {
-        topAlert.show('Ya tienes una tutoría creada para esta materia', 'info');
-        return;
-      }
-    } catch {
-      // si la verificación falla, mantenemos el flujo existente y dejamos que la pantalla siguiente valide
-    }
-    router.push(`/matricula/${encodeURIComponent(subject.key)}?name=${encodeURIComponent(subject.title)}`);
+    });
+  }, [cardAnims, cardShown, cardYs, subjects, windowHeight]);
+
+  // Animate cards when they enter the viewport (fade/slide in).
+  const onScroll = (e) => {
+    const y = e?.nativeEvent?.contentOffset?.y || 0;
+    scrollYRef.current = y;
+    maybeAnimateVisible();
   };
+  // Run once after mount to animate above-the-fold cards
+  useEffect(() => {
+    const id = requestAnimationFrame(() => maybeAnimateVisible());
+    return () => cancelAnimationFrame(id);
+  }, [maybeAnimateVisible]);
+  // Detect small screens to adjust some styles
+  const isSmall = windowHeight < 680 || windowWidth < 360;
+  return ( // Main container view with background color
+    <View style={styles.screen}>
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        {/* Hero con gradiente */}
+        <LinearGradient
+          colors={["#FF8E53", "#FF7F50", "#1B1E36"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <Text style={[styles.heroTitle, isSmall && { fontSize: 34 }]}>TUTORIAS</Text>
+          <Text style={[styles.heroSubtitle, isSmall && { fontSize: 12 }]}>Reserva clases, edita tu perfil y chatea</Text>
+          {authChecked && !isAuthed && (
+            <View style={[styles.heroActions, isSmall && { flexWrap: 'wrap' }]}>
+              <TouchableOpacity
+                style={[styles.heroBtn, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
+                onPress={() => router.push("/login")}
+              >
+                <Text style={styles.heroBtnText}>Iniciar sesión</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/signup")}
+                style={[styles.ctaGradientBtn, isSmall && { marginTop: 8 }]}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={["#34D399", "#10B981"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.ctaGradientBg, isSmall && { paddingVertical: 10, paddingHorizontal: 12 }]}
+                >
+                  <Text style={styles.ctaGradientText}>Registrarme</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+        </LinearGradient>
 
-  return (
-    <Page contentStyle={[styles.content, isDesktop && styles.desktopContent]}>
-      <LinearGradient colors={['#111827', '#312E81', '#4F46E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <View style={styles.heroCopy}>
-          <Badge tone="amber">Plataforma de tutorías</Badge>
-          <Text style={styles.heroTitle}>Aprende con docentes disponibles, reserva y paga en minutos.</Text>
-          <Text style={styles.heroSubtitle}>Una experiencia web-first para explorar clases, administrar reservas y coordinar materiales o chats desde un workspace claro.</Text>
-          <View style={styles.actions}>
-            {!session.isAuthenticated && <Button icon="login" onPress={() => router.push('/login')}>Iniciar sesión</Button>}
-            <Button variant="secondary" icon="search" onPress={() => router.push('/inspect/calculo?name=Cálculo')}>Explorar clases</Button>
-          </View>
-        </View>
-        <Card style={styles.heroPanel}>
-          <Text style={styles.panelKicker}>Workspace</Text>
-          <Text style={styles.panelTitle}>Vista rápida</Text>
-          {metrics.map((item) => <View key={item.label} style={styles.metricLine}><Text style={styles.metricLabel}>{item.label}</Text><Text style={styles.metricValue}>{item.value}</Text></View>)}
-        </Card>
-      </LinearGradient>
+        {/* Lista de materias */}
+        <View style={styles.listContainer}>
+          <Text style={styles.sectionTitle}>Materias</Text>
 
       <View style={styles.sectionHeader}>
         <View>

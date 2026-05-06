@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -17,8 +17,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function MockPaymentScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const isDesktop = Platform.OS === 'web' && width >= 900;
   const router = useRouter();
   const params = useLocalSearchParams();
   const topAlert = useTopAlert();
@@ -147,7 +145,7 @@ export default function MockPaymentScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: 80, paddingHorizontal: 24, paddingLeft: isDesktop ? 284 : 24, maxWidth: isDesktop ? 1420 : undefined, alignSelf: 'center', width: '100%' }}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 36, paddingHorizontal: 16 }}>
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}><Text style={styles.backText}>Volver</Text></TouchableOpacity>
       <View style={styles.hero}>
         <View style={styles.secureBadge}><MaterialIcons name="lock" size={16} color="#064E3B" /><Text style={styles.secureText}>Pago mock protegido · no guardamos tu tarjeta</Text></View>
@@ -155,7 +153,7 @@ export default function MockPaymentScreen() {
         <Text style={styles.subtitle}>Simula el pago y envía tu solicitud al docente en un solo flujo.</Text>
       </View>
 
-      <View style={[styles.grid, isDesktop && styles.gridDesktop]}>
+      <View style={styles.grid}>
         <View style={styles.formCard}>
           {success && <View style={styles.successBox}><MaterialIcons name="check-circle" size={22} color="#16A34A" /><Text style={styles.successText}>Pago aprobado. Redirigiendo...</Text></View>}
           <PaymentInput label="Nombre del titular" value={form.cardholder} onChangeText={(value) => updateField('cardholder', value)} error={errors.cardholder} placeholder="María Pérez" autoCapitalize="words" />
@@ -203,9 +201,8 @@ const styles = StyleSheet.create({
   title: { color: '#F8FAFC', fontSize: 28, fontWeight: '900' },
   subtitle: { color: '#CBD5E1', marginTop: 8, lineHeight: 21 },
   grid: { gap: 16 },
-  gridDesktop: { flexDirection: 'row', alignItems: 'flex-start' },
-  formCard: { flex: 1.1, backgroundColor: '#F8FAFC', borderRadius: 24, padding: 18, gap: 12 },
-  summaryCard: { flex: 0.8, backgroundColor: '#1E293B', borderRadius: 24, padding: 18, borderWidth: 1, borderColor: '#334155' },
+  formCard: { backgroundColor: '#F8FAFC', borderRadius: 24, padding: 18, gap: 12 },
+  summaryCard: { backgroundColor: '#1E293B', borderRadius: 24, padding: 18, borderWidth: 1, borderColor: '#334155' },
   inputGroup: { gap: 7, marginBottom: 4 },
   label: { color: '#334155', fontWeight: '800' },
   inputShell: { minHeight: 50, borderRadius: 14, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 8 },
