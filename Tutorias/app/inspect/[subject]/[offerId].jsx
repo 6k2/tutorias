@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIn
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
-import { doc, getDoc, runTransaction, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useTopAlert } from '../../../components/TopAlert';
 import { useAuthGuard } from '../../../hooks/useAuthGuard';
@@ -52,7 +52,6 @@ export default function OfferDetailScreen() {
 
   const [offer, setOffer] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [existingReservations, setExistingReservations] = useState([]);
   const [teacherReservations, setTeacherReservations] = useState([]);
@@ -176,7 +175,7 @@ export default function OfferDetailScreen() {
   return `${dayLabel} · ${hoursToLabel(slot.hourStart)} - ${hoursToLabel(slot.hourEnd)}`;
 };
 
-  const canBook = !loading && !submitting && !!selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer;
+  const canBook = !loading && !!selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer;
 
   const handleBook = async () => {
     if (!selectedSlot) {
@@ -184,11 +183,11 @@ export default function OfferDetailScreen() {
       return;
     }
     if (!user) {
-      topAlert.show('Debes iniciar sesión para reservar', 'info');
+      topAlert.show('Debes iniciar sesion para reservar', 'info');
       return;
     }
     if (isOwnOffer) {
-      topAlert.show('No puedes reservar tu propia tutoría', 'info');
+      topAlert.show('No puedes reservar tu propia tutoria', 'info');
       return;
     }
     if (hasPending) {
@@ -200,77 +199,15 @@ export default function OfferDetailScreen() {
       return;
     }
 
-    setSubmitting(true);
-    let offerSnapshot = null;
-    try {
-      offerSnapshot = await runTransaction(db, async (transaction) => {
-        const offerRef = doc(db, OFFERS_COLLECTION, offerId);
-        const snap = await transaction.get(offerRef);
-        if (!snap.exists()) {
-          throw new Error('Oferta no disponible');
-        }
-        const data = snap.data() || {};
-        const max = Number(data.maxStudents || 0);
-        const enrolled = Number(data.enrolledCount || 0);
-        const pending = Number(data.pendingCount || 0);
-        const unlimitedOffer = max === 0;
-        if (!unlimitedOffer && enrolled + pending >= max) {
-          throw new Error('No hay cupos disponibles');
-        }
-        transaction.update(offerRef, {
-          pendingCount: pending + 1,
-          updatedAt: serverTimestamp(),
-        });
-        return data;
-      });
-
-      const reservationData = {
-        offerId,
-        subjectKey,
-        subjectName: offerSnapshot.subjectName || subjectName,
-        teacherId: offerSnapshot.uid,
-        studentId: user.uid,
-        status: RESERVATION_STATUS.PENDING,
-        slot: selectedSlot,
-        price: offerSnapshot.price || null,
-        studentDisplayName: user.displayName || user.email || '',
-        teacherDisplayName: offerSnapshot.username || offerSnapshot.teacherDisplayName || '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, RESERVATIONS_COLLECTION), reservationData);
-
-      setOffer((prev) => (prev ? { ...prev, pendingCount: Number(prev.pendingCount || 0) + 1 } : prev));
-      topAlert.show('Solicitud enviada. Espera la confirmación del docente.', 'success');
-      router.push('/agenda');
-    } catch (error) {
-      if (offerSnapshot && error?.message !== 'No hay cupos disponibles') {
-        try {
-          await runTransaction(db, async (transaction) => {
-            const offerRef = doc(db, OFFERS_COLLECTION, offerId);
-            const snap = await transaction.get(offerRef);
-            if (!snap.exists()) return;
-            const data = snap.data() || {};
-            const pending = Number(data.pendingCount || 0);
-            transaction.update(offerRef, {
-              pendingCount: Math.max(0, pending - 1),
-              updatedAt: serverTimestamp(),
-            });
-          });
-        } catch (rollbackError) {
-          console.error('offer detail: rollback failed', rollbackError);
-        }
-      }
-      const message = error?.message === 'No hay cupos disponibles'
-        ? 'No hay cupos disponibles'
-        : 'No se pudo crear la reserva';
-      topAlert.show(message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
+    router.push({
+      pathname: `/checkout/${offerId}`,
+      params: {
+        subject: subjectKey,
+        name: subjectName,
+        slot: encodeURIComponent(JSON.stringify(selectedSlot)),
+      },
+    });
   };
-
   const handleUploadMaterial = useCallback(
     async (reservation) => {
       if (!reservation) return;
@@ -401,11 +338,7 @@ export default function OfferDetailScreen() {
         onPress={handleBook}
         disabled={!canBook}
       >
-        {submitting ? (
-          <ActivityIndicator size="small" color="#1B1E36" />
-        ) : (
-          <Text style={styles.bookBtnText}>Reservar</Text>
-        )}
+        <Text style={styles.bookBtnText}>Ir a pagar</Text>
       </TouchableOpacity>
 
       {isOwnOffer && (

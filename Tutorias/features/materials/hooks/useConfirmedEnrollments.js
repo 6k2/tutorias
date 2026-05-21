@@ -29,6 +29,9 @@ export function useConfirmedEnrollments(uid, role, options = {}) {
     let unsub = () => {};
     let cancelled = false;
     setLoading(true);
+    const fallbackTimer = setTimeout(() => {
+      if (!cancelled) setLoading(false);
+    }, 4500);
 
     ensureOfflineReady()
       .catch(() => {})
@@ -59,6 +62,7 @@ export function useConfirmedEnrollments(uid, role, options = {}) {
               };
             });
             if (!cancelled) {
+              clearTimeout(fallbackTimer);
               setReservations(rows);
               setFromCache(snapshot.metadata?.fromCache ?? false);
               setLoading(false);
@@ -67,6 +71,7 @@ export function useConfirmedEnrollments(uid, role, options = {}) {
           (error) => {
             console.error('useConfirmedEnrollments: snapshot failed', error);
             if (!cancelled) {
+              clearTimeout(fallbackTimer);
               setReservations([]);
               setFromCache(false);
               setLoading(false);
@@ -77,6 +82,7 @@ export function useConfirmedEnrollments(uid, role, options = {}) {
 
     return () => {
       cancelled = true;
+      clearTimeout(fallbackTimer);
       unsub();
     };
   }, [uid, role, disabled]);

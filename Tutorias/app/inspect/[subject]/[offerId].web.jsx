@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, runTransaction, serverTimestamp, where } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, where } from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { db } from '../../config/firebase';
@@ -34,7 +34,6 @@ export default function OfferDetailWebScreen() {
   const subjectName = decodeParam(params.name) || subjectKey;
   const [offer, setOffer] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [existingReservations, setExistingReservations] = useState([]);
   const [teacherReservations, setTeacherReservations] = useState([]);
@@ -50,7 +49,7 @@ export default function OfferDetailWebScreen() {
   const remaining = unlimited ? 'Sin límite' : Math.max(0, maxStudents - enrolledCount - pendingCount);
   const hasPending = existingReservations.some((res) => res.status === RESERVATION_STATUS.PENDING);
   const hasConfirmed = existingReservations.some((res) => res.status === RESERVATION_STATUS.CONFIRMED);
-  const canBook = ready && !submitting && selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer && !connectivity.isOffline;
+  const canBook = ready && selectedSlot && !hasPending && !hasConfirmed && !isOwnOffer && !connectivity.isOffline;
 
   const { pickAndUpload, uploading, reservationId: uploadingReservationId } = useUploadMaterial({
     teacherId: user?.uid || '',
@@ -116,51 +115,20 @@ export default function OfferDetailWebScreen() {
     });
   }, [isOwnOffer, offerId]);
 
-  const handleBook = async () => {
+  const handleBook = () => {
     if (!selectedSlot || !user) return;
     if (isOwnOffer) {
       topAlert.show('No puedes reservar tu propia tutoría.', 'info');
       return;
     }
-    setSubmitting(true);
-    let offerSnapshot = null;
-    try {
-      offerSnapshot = await runTransaction(db, async (transaction) => {
-        const offerRef = doc(db, OFFERS_COLLECTION, offerId);
-        const snap = await transaction.get(offerRef);
-        if (!snap.exists()) throw new Error('Oferta no disponible');
-        const data = snap.data() || {};
-        const max = Number(data.maxStudents || 0);
-        const enrolled = Number(data.enrolledCount || 0);
-        const pending = Number(data.pendingCount || 0);
-        if (max !== 0 && enrolled + pending >= max) throw new Error('No hay cupos disponibles');
-        transaction.update(offerRef, { pendingCount: pending + 1, updatedAt: serverTimestamp() });
-        return data;
-      });
-
-      await addDoc(collection(db, RESERVATIONS_COLLECTION), {
-        offerId,
-        subjectKey,
-        subjectName: offerSnapshot.subjectName || subjectName,
-        teacherId: offerSnapshot.uid,
-        studentId: user.uid,
-        status: RESERVATION_STATUS.PENDING,
-        slot: selectedSlot,
-        price: offerSnapshot.price || null,
-        studentDisplayName: user.displayName || user.email || '',
-        teacherDisplayName: offerSnapshot.username || offerSnapshot.teacherDisplayName || '',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      setOffer((prev) => (prev ? { ...prev, pendingCount: Number(prev.pendingCount || 0) + 1 } : prev));
-      topAlert.show('Solicitud enviada. Espera la confirmación del docente.', 'success');
-      router.push('/agenda');
-    } catch (e) {
-      topAlert.show(e?.message === 'No hay cupos disponibles' ? 'No hay cupos disponibles.' : 'No se pudo crear la reserva.', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+    router.push({
+      pathname: `/checkout/${offerId}`,
+      params: {
+        subject: subjectKey,
+        name: subjectName,
+        slot: encodeURIComponent(JSON.stringify(selectedSlot)),
+      },
+    });
   };
 
   const uploadMaterial = async (reservation) => {
@@ -241,7 +209,7 @@ export default function OfferDetailWebScreen() {
           {hasConfirmed ? <WebBadge tone="green" icon="check-circle">Ya tienes una reserva confirmada</WebBadge> : null}
           {isOwnOffer ? <WebBadge tone="amber" icon="info">No puedes reservar tu propia tutoría</WebBadge> : null}
           {connectivity.isOffline ? <WebBadge tone="amber" icon="cloud-off">Conéctate para reservar</WebBadge> : null}
-          <WebButton label="Reservar" icon="event-available" onPress={handleBook} disabled={!canBook} loading={submitting} style={{ marginTop: 18 }} />
+          <WebButton label="Ir a pagar" icon="payments" onPress={handleBook} disabled={!canBook} style={{ marginTop: 18 }} />
         </WebCard>
       </View>
 

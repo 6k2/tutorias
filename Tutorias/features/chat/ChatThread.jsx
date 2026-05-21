@@ -4,6 +4,8 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -22,12 +24,14 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../../app/config/firebase';
+import { webTokens } from '../../components/web/WebUI';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { initialForProfile, stableColorForUid } from './utils/profiles';
 import { subscribeTyping, usePresence } from './hooks/usePresence';
 import { MessageInput } from './MessageInput';
 
 const PAGE_SIZE = 24;
+const isWeb = Platform.OS === 'web';
 
 export function ChatThread({
   conversation,
@@ -49,17 +53,33 @@ export function ChatThread({
   const nearBottomRef = useRef(true);
 
   const presence = usePresence(partner?.uid);
-  const background = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
-  const tintColor = useThemeColor({}, 'tint');
-  const mutedColor = useThemeColor({}, 'icon');
-  const borderColor = `${mutedColor}40`;
+  const nativeBackground = useThemeColor({}, 'background');
+  const nativeText = useThemeColor({}, 'text');
+  const nativeTint = useThemeColor({}, 'tint');
+  const nativeMuted = useThemeColor({}, 'icon');
+
+  const colors = useMemo(
+    () => ({
+      background: isWeb ? webTokens.color.elevated : nativeBackground,
+      surface: isWeb ? webTokens.color.surface : nativeBackground,
+      input: isWeb ? webTokens.color.input : nativeBackground,
+      text: isWeb ? webTokens.color.ink : nativeText,
+      muted: isWeb ? webTokens.color.muted : nativeMuted,
+      border: isWeb ? webTokens.color.line : `${nativeMuted}40`,
+      brand: isWeb ? webTokens.color.brand : nativeTint,
+      brandSoft: isWeb ? webTokens.color.surfaceAlt : `${nativeTint}18`,
+      good: isWeb ? webTokens.color.good : '#059669',
+      bad: isWeb ? webTokens.color.bad : nativeTint,
+    }),
+    [nativeBackground, nativeMuted, nativeText, nativeTint]
+  );
   const safeBottomInset = Math.max(0, bottomInset);
 
   useEffect(() => {
     setMessages([]);
     setCursor(null);
     setReachedEnd(false);
+    nearBottomRef.current = true;
   }, [conversationId]);
 
   useEffect(() => {
@@ -109,7 +129,7 @@ export function ChatThread({
     if (!nearBottomRef.current) return;
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd?.({ animated: true });
-    }, 60);
+    }, 80);
     return () => clearTimeout(timer);
   }, [messages.length, pendingMessages.length, isPartnerTyping]);
 
@@ -177,54 +197,54 @@ export function ChatThread({
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom =
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    nearBottomRef.current = distanceFromBottom < 96;
+    nearBottomRef.current = distanceFromBottom < 110;
   }, []);
 
   if (!conversationId) {
     return (
-      <View style={[styles.emptyThread, { backgroundColor: background }]}>
-        <MaterialIcons name="forum" size={38} color={mutedColor} />
-        <Text style={[styles.emptyText, { color: mutedColor }]}>
-          Selecciona una conversacion.
+      <View style={[styles.emptyThread, { backgroundColor: colors.background }]}>
+        <View style={[styles.emptyIcon, { backgroundColor: colors.brandSoft }]}>
+          <MaterialIcons name="forum" size={34} color={colors.brand} />
+        </View>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>Selecciona una conversacion</Text>
+        <Text style={[styles.emptyText, { color: colors.muted }]}>
+          Tus chats activos apareceran aqui con mensajes en tiempo real.
         </Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: background, paddingBottom: safeBottomInset }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingBottom: safeBottomInset }]}>
       {showHeader ? (
         <ThreadHeader
           partner={partner}
           presence={presence}
-          textColor={textColor}
-          mutedColor={mutedColor}
-          borderColor={borderColor}
+          colors={colors}
         />
       ) : null}
       <FlatList
         ref={listRef}
         data={combinedMessages}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <MessageBubble
             message={item}
+            previousMessage={combinedMessages[index - 1]}
             isOwnMessage={item.from === currentUser?.uid}
-            textColor={textColor}
-            tintColor={tintColor}
-            mutedColor={mutedColor}
+            colors={colors}
           />
         )}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, isWeb && styles.webListContent]}
         onScroll={handleScroll}
         scrollEventThrottle={80}
         ListHeaderComponent={
           !reachedEnd && combinedMessages.length ? (
-            <Pressable style={styles.loadOlder} onPress={loadOlder} disabled={loadingOlder}>
+            <Pressable style={[styles.loadOlder, { backgroundColor: colors.input, borderColor: colors.border }]} onPress={loadOlder} disabled={loadingOlder}>
               {loadingOlder ? (
-                <ActivityIndicator color={tintColor} />
+                <ActivityIndicator color={colors.brand} />
               ) : (
-                <Text style={[styles.loadOlderText, { color: tintColor }]}>Cargar anteriores</Text>
+                <Text style={[styles.loadOlderText, { color: colors.brand }]}>Cargar anteriores</Text>
               )}
             </Pressable>
           ) : null
@@ -232,16 +252,16 @@ export function ChatThread({
         ListFooterComponent={
           isPartnerTyping ? (
             <View style={styles.typingRow}>
-              <Text style={[styles.typingText, { color: mutedColor }]}>Escribiendo...</Text>
+              <Text style={[styles.typingText, { color: colors.muted }]}>Escribiendo...</Text>
             </View>
           ) : null
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={tintColor} style={styles.emptyLoader} />
+            <ActivityIndicator color={colors.brand} style={styles.emptyLoader} />
           ) : (
             <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: mutedColor }]}>No hay mensajes aun.</Text>
+              <Text style={[styles.emptyText, { color: colors.muted }]}>Aun no hay mensajes.</Text>
             </View>
           )
         }
@@ -256,10 +276,10 @@ export function ChatThread({
   );
 }
 
-function ThreadHeader({ partner, presence, textColor, mutedColor, borderColor }) {
+function ThreadHeader({ partner, presence, colors }) {
   const color = partner?.avatarColor || stableColorForUid(partner?.uid);
   return (
-    <View style={[styles.header, { borderBottomColor: borderColor }]}>
+    <View style={[styles.header, isWeb && styles.webHeader, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={[styles.headerAvatar, { backgroundColor: color }]}>
         {partner?.photoURL ? (
           <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
@@ -268,45 +288,61 @@ function ThreadHeader({ partner, presence, textColor, mutedColor, borderColor })
         )}
       </View>
       <View style={styles.headerInfo}>
-        <Text style={[styles.headerName, { color: textColor }]}>{partner?.displayName || 'Contacto'}</Text>
-        <Text style={[styles.headerPresence, { color: mutedColor }]}>
-          {presence.online ? 'En linea' : formatLastSeen(presence.lastSeen)}
+        <Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{partner?.displayName || 'Contacto'}</Text>
+        <Text style={[styles.headerPresence, { color: colors.muted }]} numberOfLines={1}>
+          {presence.online ? 'En linea ahora' : formatLastSeen(presence.lastSeen)}
           {partner?.subjectName ? ` · ${partner.subjectName}` : ''}
+          {partner?.relationship ? ` · ${partner.relationship}` : ''}
+        </Text>
+      </View>
+      <View style={[styles.headerStatus, { backgroundColor: presence.online ? colors.good : colors.input }]}>
+        <Text style={[styles.headerStatusText, { color: presence.online ? '#fff' : colors.muted }]}>
+          {presence.online ? 'Online' : 'Offline'}
         </Text>
       </View>
     </View>
   );
 }
 
-function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor }) {
+function MessageBubble({ message, previousMessage, isOwnMessage, colors }) {
   const attachments = Array.isArray(message.attachments) ? message.attachments : [];
-  const bubbleTextColor = isOwnMessage ? '#fff' : textColor;
-  const timestampColor = isOwnMessage ? '#ffffffcc' : mutedColor;
+  const hasText = Boolean(message.text);
+  if (!hasText && !attachments.length && !message.pending) return null;
+
+  const sameSenderAsPrevious = previousMessage?.from && previousMessage.from === message.from;
+  const bubbleTextColor = isOwnMessage ? '#fff' : colors.text;
+  const timestampColor = isOwnMessage ? '#ffffffcc' : colors.muted;
 
   return (
-    <View style={[styles.messageRow, isOwnMessage ? styles.rowRight : styles.rowLeft]}>
+    <View style={[styles.messageRow, sameSenderAsPrevious && styles.messageRowTight, isOwnMessage ? styles.rowRight : styles.rowLeft]}>
       <View
         style={[
           styles.bubbleBase,
+          isWeb && styles.webBubbleBase,
           isOwnMessage
-            ? [styles.bubbleOwn, { backgroundColor: tintColor }]
-            : [styles.bubbleOther, { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` }],
+            ? [styles.bubbleOwn, { backgroundColor: colors.brand }]
+            : [styles.bubbleOther, { borderColor: colors.border, backgroundColor: colors.input }],
         ]}
       >
-        {message.text ? (
+        {hasText ? (
           <Text style={[styles.messageText, { color: bubbleTextColor }]}>{message.text}</Text>
         ) : null}
         {attachments.map((attachment, index) => (
-          <View key={`${attachment.url || attachment.name || index}`} style={styles.attachmentBubble}>
+          <Pressable
+            key={`${attachment.url || attachment.name || index}`}
+            style={[styles.attachmentBubble, { borderColor: isOwnMessage ? '#ffffff55' : colors.border }]}
+            onPress={() => attachment.url && Linking.openURL(attachment.url)}
+            accessibilityRole="link"
+          >
             <MaterialIcons
-              name={attachment.type === 'image' ? 'image' : 'attach-file'}
+              name={attachment.type === 'image' ? 'image' : 'picture-as-pdf'}
               size={16}
               color={bubbleTextColor}
             />
             <Text style={[styles.attachmentText, { color: bubbleTextColor }]} numberOfLines={1}>
               {attachment.name || (attachment.type === 'image' ? 'Imagen' : 'Archivo')}
             </Text>
-          </View>
+          </Pressable>
         ))}
         <View style={styles.metaRow}>
           {message.pending ? (
@@ -353,6 +389,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
+    padding: 24,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -360,6 +409,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  webHeader: {
+    minHeight: 72,
+    paddingHorizontal: 18,
   },
   headerAvatar: {
     width: 44,
@@ -381,18 +434,33 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flex: 1,
+    minWidth: 0,
   },
   headerName: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   headerPresence: {
     fontSize: 13,
     marginTop: 2,
+    fontWeight: '700',
+  },
+  headerStatus: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  headerStatusText: {
+    fontSize: 11,
+    fontWeight: '900',
   },
   listContent: {
     padding: 16,
     flexGrow: 1,
+  },
+  webListContent: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
   },
   loadOlder: {
     alignSelf: 'center',
@@ -400,12 +468,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 12,
     marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
   },
   loadOlderText: {
-    fontWeight: '800',
+    fontWeight: '900',
   },
   messageRow: {
     marginBottom: 10,
+  },
+  messageRowTight: {
+    marginBottom: 5,
   },
   rowRight: {
     alignItems: 'flex-end',
@@ -418,7 +491,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    gap: 5,
+    gap: 6,
+  },
+  webBubbleBase: {
+    maxWidth: '68%',
+    borderRadius: 16,
   },
   bubbleOwn: {
     borderTopRightRadius: 6,
@@ -432,13 +509,18 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   attachmentBubble: {
+    minWidth: 180,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
   },
   attachmentText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     maxWidth: 220,
   },
   metaRow: {
@@ -449,10 +531,11 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 11,
+    fontWeight: '700',
   },
   pendingText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   emptyState: {
     flex: 1,
@@ -463,6 +546,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     textAlign: 'center',
+    lineHeight: 20,
   },
   emptyLoader: {
     marginVertical: 24,
@@ -473,5 +557,6 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 13,
+    fontWeight: '700',
   },
 });

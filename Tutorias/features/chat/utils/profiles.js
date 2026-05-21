@@ -27,6 +27,8 @@ export const buildConversationKey = (uidA, uidB) => {
 
 export const normalizeRole = (role) => String(role || '').trim().toLowerCase();
 
+const isRemotePhotoURL = (value) => typeof value === 'string' && /^https?:\/\//i.test(value);
+
 export const roleLabel = (role, relationship) => {
   if (relationship) return relationship;
   return ROLE_LABELS[normalizeRole(role)] || 'Contacto';
@@ -42,80 +44,102 @@ export const stableColorForUid = (uid = '') => {
 };
 
 export const displayNameForProfile = (profile = {}, fallback = {}) => {
+  const safeProfile = profile || {};
+  const safeFallback = fallback || {};
   const explicit =
-    profile.displayName ||
-    profile.username ||
-    profile.name ||
-    profile.email ||
-    fallback.displayName ||
-    fallback.username ||
-    fallback.email;
+    safeProfile.displayName ||
+    safeProfile.username ||
+    safeProfile.name ||
+    safeProfile.email ||
+    safeFallback.displayName ||
+    safeFallback.username ||
+    safeFallback.email;
   if (explicit && String(explicit).trim() && explicit !== 'Sin nombre') {
     return String(explicit).trim();
   }
 
-  const relationship = profile.relationship || fallback.relationship;
-  const subjectName = profile.subjectName || fallback.subjectName;
-  const role = roleLabel(profile.role || fallback.role, relationship);
+  const relationship = safeProfile.relationship || safeFallback.relationship;
+  const subjectName = safeProfile.subjectName || safeFallback.subjectName;
+  const role = roleLabel(safeProfile.role || safeFallback.role, relationship);
   return subjectName ? `${role} de ${subjectName}` : role;
 };
 
 export const initialForProfile = (profile = {}, fallback = {}) => {
-  const name = displayNameForProfile(profile, fallback);
+  const safeProfile = profile || {};
+  const safeFallback = fallback || {};
+  const name = displayNameForProfile(safeProfile, safeFallback);
   const first = String(name || '').trim()[0];
   if (first) return first.toUpperCase();
-  return String(profile.uid || fallback.uid || '?')[0].toUpperCase();
+  return String(safeProfile.uid || safeFallback.uid || '?')[0].toUpperCase();
 };
 
 export const normalizeParticipantProfile = (user = {}, conversationId, meta = {}) => {
-  const uid = user?.uid || null;
-  const isStudent = uid && meta?.studentId === uid;
-  const isTeacher = uid && meta?.teacherId === uid;
+  const safeUser = user || {};
+  const safeMeta = meta || {};
+  const uid = safeUser?.uid || null;
+  const isStudent = uid && safeMeta?.studentId === uid;
+  const isTeacher = uid && safeMeta?.teacherId === uid;
   const relationship =
-    user?.relationship ||
-    meta?.relationship ||
+    safeUser?.relationship ||
+    safeMeta?.relationship ||
     (isTeacher ? 'Docente' : isStudent ? 'Estudiante' : null);
-  const subjectName = user?.subjectName || meta?.subjectName || null;
+  const subjectName = safeUser?.subjectName || safeMeta?.subjectName || null;
 
   return {
     uid,
-    displayName: displayNameForProfile(user, {
-      displayName: isTeacher ? meta?.teacherDisplayName : isStudent ? meta?.studentDisplayName : null,
+    displayName: displayNameForProfile(safeUser, {
+      displayName: isTeacher ? safeMeta?.teacherDisplayName : isStudent ? safeMeta?.studentDisplayName : null,
       relationship,
-      role: user?.role,
+      role: safeUser?.role,
       subjectName,
     }),
-    photoURL: user?.photoURL || null,
-    role: user?.role || (isTeacher ? 'teacher' : isStudent ? 'student' : null),
+    photoURL: isRemotePhotoURL(safeUser?.photoURL) ? safeUser.photoURL : null,
+    role: safeUser?.role || (isTeacher ? 'teacher' : isStudent ? 'student' : null),
     relationship,
     conversationId,
-    subjectKey: user?.subjectKey || meta?.subjectKey || null,
+    subjectKey: safeUser?.subjectKey || safeMeta?.subjectKey || null,
     subjectName,
     avatarColor: stableColorForUid(uid),
   };
 };
 
+const asRecord = (value) => (value && typeof value === 'object' ? value : {});
+
 export const participantsFromConversation = (conversation = {}, currentUid = null) => {
-  const profileMap = conversation.participantProfiles || {};
+  const safeConversation = asRecord(conversation);
+  if (!Object.keys(safeConversation).length) return [];
+  const profileMap = asRecord(safeConversation.participantProfiles);
   const profiles = Object.values(profileMap).filter((item) => item?.uid);
-  if (profiles.length) return profiles;
-  return Array.isArray(conversation.participants) ? conversation.participants : [];
+  if (profiles.length) {
+    return profiles.map((profile) => ({
+      ...profile,
+      photoURL: isRemotePhotoURL(profile.photoURL) ? profile.photoURL : null,
+    }));
+  }
+  return Array.isArray(safeConversation.participants)
+    ? safeConversation.participants.map((profile) => ({
+      ...profile,
+      photoURL: isRemotePhotoURL(profile.photoURL) ? profile.photoURL : null,
+    }))
+    : [];
 };
 
 export const partnerFromConversation = (conversation = {}, currentUid = null) => {
-  const participants = participantsFromConversation(conversation, currentUid);
+  const safeConversation = asRecord(conversation);
+  if (!Object.keys(safeConversation).length) return null;
+  const participants = participantsFromConversation(safeConversation, currentUid);
   const partner = participants.find((item) => item?.uid && item.uid !== currentUid);
   if (partner) {
     return {
       ...partner,
-      displayName: displayNameForProfile(partner, conversation.enrollmentMeta || {}),
+      displayName: displayNameForProfile(partner, safeConversation.enrollmentMeta || {}),
       avatarColor: partner.avatarColor || stableColorForUid(partner.uid),
     };
   }
 
-  const meta = conversation.enrollmentMeta || {};
-  const participantUids = Array.isArray(conversation.participantUids)
-    ? conversation.participantUids
+  const meta = safeConversation.enrollmentMeta || {};
+  const participantUids = Array.isArray(safeConversation.participantUids)
+    ? safeConversation.participantUids
     : [];
   const uid =
     participantUids.find((item) => item && item !== currentUid) ||
@@ -127,7 +151,7 @@ export const partnerFromConversation = (conversation = {}, currentUid = null) =>
       uid,
       role: uid === meta.teacherId ? 'teacher' : 'student',
     },
-    conversation.id,
+    safeConversation.id,
     meta
   );
 };

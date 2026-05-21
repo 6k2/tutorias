@@ -117,6 +117,9 @@ export function useChatContacts(currentUser) {
     const rowsBySubject = new Map();
     const unsubscribers = [];
     setPeersLoading(true);
+    const fallbackTimer = setTimeout(() => {
+      if (active) setPeersLoading(false);
+    }, 4500);
 
     subjectKeys.forEach((subjectKey) => {
       const reservationsQuery = query(
@@ -132,6 +135,7 @@ export function useChatContacts(currentUser) {
           rowsBySubject.set(subjectKey, snapshot.docs.map(reservationFromSnapshot));
           setPeerRows([...rowsBySubject.values()].flat());
           setPeersFromCache((prev) => prev || snapshot.metadata?.fromCache || false);
+          clearTimeout(fallbackTimer);
           setPeersLoading(false);
         },
         (error) => {
@@ -139,6 +143,7 @@ export function useChatContacts(currentUser) {
           if (active) {
             rowsBySubject.set(subjectKey, []);
             setPeerRows([...rowsBySubject.values()].flat());
+            clearTimeout(fallbackTimer);
             setPeersLoading(false);
           }
         }
@@ -148,6 +153,7 @@ export function useChatContacts(currentUser) {
 
     return () => {
       active = false;
+      clearTimeout(fallbackTimer);
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, [uid, currentIsTeacher, subjectKeySignature]); // eslint-disable-line react-hooks/exhaustive-deps

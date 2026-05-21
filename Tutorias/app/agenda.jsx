@@ -15,6 +15,7 @@ import {
 } from '../hooks/useReservations';
 import { useConnectivity, useOfflineSync } from '../tools/offline';
 import { RESERVATION_STATUS } from '../constants/firestore';
+import { formatMoney, paymentTotals } from '../features/payments';
 
 const dayLabels = {
   Mon: 'Mon',
@@ -149,6 +150,11 @@ export default function AgendaScreen() {
   );
   const teacherConfirmed = useMemo(
     () => reservations.filter((res) => res.status === RESERVATION_STATUS.CONFIRMED),
+    [reservations]
+  );
+  const totals = useMemo(() => paymentTotals(reservations), [reservations]);
+  const paidRows = useMemo(
+    () => reservations.filter((res) => res.paymentStatus === 'paid'),
     [reservations]
   );
 
@@ -300,6 +306,34 @@ export default function AgendaScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.revenueCard}>
+            <View style={styles.revenueHeader}>
+              <Text style={styles.sectionTitle}>Recaudo</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{totals.count} pago(s)</Text>
+              </View>
+            </View>
+            <View style={styles.moneyRow}>
+              <View style={styles.moneyBox}>
+                <Text style={styles.moneyValue}>{formatMoney(totals.confirmed)}</Text>
+                <Text style={styles.moneyLabel}>Recaudado confirmado</Text>
+              </View>
+              <View style={styles.moneyBox}>
+                <Text style={styles.moneyValue}>{formatMoney(totals.pending)}</Text>
+                <Text style={styles.moneyLabel}>Pagado pendiente</Text>
+              </View>
+            </View>
+            {paidRows.slice(0, 4).map((item) => (
+              <View key={`paid-${item.id}`} style={styles.paidRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+                  <Text style={styles.cardSubtitle}>{item.studentDisplayName || item.studentId} · {item.statusLabel || item.status}</Text>
+                </View>
+                <Text style={styles.cardSlot}>{formatMoney(item.paymentAmount ?? item.price)}</Text>
+              </View>
+            ))}
+          </View>
+
           {activeTab === 'pending' && teacherPending.length === 0 && (
             <Text style={styles.emptyText}>No hay solicitudes pendientes.</Text>
           )}
@@ -396,6 +430,26 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: { color: '#1B1E36', fontWeight: '800' },
+  revenueCard: {
+    backgroundColor: '#2C2F48',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    gap: 10,
+  },
+  revenueHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  moneyRow: { flexDirection: 'row', gap: 10 },
+  moneyBox: { flex: 1, backgroundColor: '#1B1E36', borderRadius: 12, padding: 12 },
+  moneyValue: { color: '#FFD580', fontWeight: '900', fontSize: 18 },
+  moneyLabel: { color: '#C7C9D9', marginTop: 4, fontSize: 12, fontWeight: '700' },
+  paidRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#4B516D',
+    paddingTop: 10,
+    gap: 10,
+  },
   tabRow: {
     flexDirection: 'row',
     backgroundColor: '#2C2F48',

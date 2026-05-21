@@ -38,6 +38,7 @@ export function useChatController() {
   const conversationsData = useUserConversations(currentUser?.uid, {
     allowedKeys: contactsData.allowedKeys,
     metaByKey: contactsData.metaByKey,
+    disabled: !currentUser?.uid || contactsData.loading,
   });
   const isStudent = isStudentRole(currentUser?.role);
   const materialsInbox = useMaterialsInbox(isStudent ? currentUser?.uid : null, {
@@ -68,10 +69,10 @@ export function useChatController() {
     [activeConversationId, conversationsData.items]
   );
 
-  const activePartner = useMemo(
-    () => getConversationPartner(activeConversation, currentUser?.uid),
-    [activeConversation, currentUser?.uid]
-  );
+  const activePartner = useMemo(() => {
+    if (!activeConversation || !currentUser?.uid) return null;
+    return getConversationPartner(activeConversation, currentUser.uid);
+  }, [activeConversation, currentUser?.uid]);
 
   const resolvePendingMessage = useCallback((conversationId, clientId) => {
     setPendingMessages((prev) => {
@@ -158,7 +159,7 @@ export function useChatController() {
     connectivity,
     contactsData,
     conversations: conversationsData.items,
-    conversationsLoading: conversationsData.loading,
+    conversationsLoading: currentUser === undefined || contactsData.loading || conversationsData.loading,
     conversationsFromCache: conversationsData.fromCache,
     activeConversationId,
     activeConversation,

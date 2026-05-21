@@ -27,7 +27,10 @@ import { useMaterialsByReservation } from '../../features/materials/hooks/useMat
 import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
 import { useMaterialViews } from '../../features/materials/hooks/useMaterialViews';
 import { useOfflineMaterial } from '../../features/materials/hooks/useOfflineMaterial';
+import { formatMoney, paymentTotals } from '../../features/payments';
+import { resolveProfileAvatar, syncChatProfileForUser } from '../../features/profile/avatar';
 import { useAuthGuard } from '../../hooks/useAuthGuard';
+import { useReservations } from '../../hooks/useReservations';
 
 const allSubjects = ['Cálculo', 'Software', 'Biología', 'Álgebra', 'Inglés'];
 
@@ -37,11 +40,13 @@ export default function ProfileWebScreen() {
   const { user, ready } = useAuthGuard({ dest: 'Perfil', delayMs: 400 });
   const [loading, setLoading] = useState(true);
   const [photoURL, setPhotoURL] = useState('');
+  const [savedPhotoURL, setSavedPhotoURL] = useState('');
   const [description, setDescription] = useState('');
   const [specialties, setSpecialties] = useState([]);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
+  const [saving, setSaving] = useState(false);
   const [materialsModalVisible, setMaterialsModalVisible] = useState(false);
   const [activeReservation, setActiveReservation] = useState(null);
 
@@ -49,6 +54,7 @@ export default function ProfileWebScreen() {
   const isTeacher = roleIsTeacher(role);
   const confirmedEnrollments = useConfirmedEnrollments(isStudent ? user?.uid : null, role, { disabled: !isStudent });
   const materialsInbox = useMaterialsInbox(isStudent ? user?.uid : null, { disabled: !isStudent });
+  const teacherReservations = useReservations(role, isTeacher ? user?.uid : null, { disabled: !isTeacher });
   const { markMaterialViewed, materialViews } = useMaterialViews(isStudent ? user?.uid : null);
   useMaterialDownloadQueue(isStudent ? user?.uid : null);
 
@@ -60,6 +66,7 @@ export default function ProfileWebScreen() {
     const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.data() || {};
       setPhotoURL(data.photoURL || '');
+      setSavedPhotoURL(data.photoURL || '');
       setDescription(data.description || '');
       setSpecialties(Array.isArray(data.specialties) ? data.specialties : []);
       setUsername(data.username || '');
@@ -80,6 +87,10 @@ export default function ProfileWebScreen() {
       return { reservation, materials, unseen };
     });
   }, [confirmedEnrollments.reservations, materialsInbox.byReservation, materialViews]);
+  const teacherPaymentTotals = useMemo(
+    () => paymentTotals(teacherReservations.reservations || []),
+    [teacherReservations.reservations]
+  );
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions?.Images ?? 'images', quality: 0.7 });
@@ -88,19 +99,43 @@ export default function ProfileWebScreen() {
 
   const saveProfile = async () => {
     if (!user?.uid) return;
+    setSaving(true);
     try {
+      const avatar = await resolveProfileAvatar({
+        uid: user.uid,
+        uri: photoURL,
+        fallbackURL: savedPhotoURL,
+      });
+      const remotePhotoURL = avatar.photoURL;
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: email || user.email,
         username,
-        photoURL,
+        photoURL: remotePhotoURL,
         description,
         specialties,
         role,
       }, { merge: true });
-      topAlert.show('Perfil actualizado.', 'success');
-    } catch {
+      setPhotoURL(remotePhotoURL);
+      try {
+        await syncChatProfileForUser({
+          uid: user.uid,
+          displayName: username || email || user.email || user.uid,
+          photoURL: remotePhotoURL,
+          role,
+        });
+      } catch (syncError) {
+        console.warn('ProfileWeb: chat profile sync failed', syncError);
+      }
+      topAlert.show(
+        avatar.uploadFailed ? 'Perfil guardado, pero no se pudo subir la foto.' : 'Perfil actualizado.',
+        avatar.uploadFailed ? 'error' : 'success'
+      );
+    } catch (error) {
+      console.error('ProfileWeb: save failed', error);
       topAlert.show('No se pudo guardar el perfil.', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -167,10 +202,19 @@ export default function ProfileWebScreen() {
               </View>
             </>
           ) : null}
-          <WebButton label="Guardar cambios" icon="save" onPress={saveProfile} style={styles.save} />
+          <WebButton label="Guardar cambios" icon="save" onPress={saveProfile} loading={saving} style={styles.save} />
         </WebCard>
 
         <View style={styles.side}>
+          {isTeacher ? (
+            <WebCard style={styles.quickCard}>
+              <Text style={styles.blockTitle}>Recaudo</Text>
+              <Text style={styles.metricMoney}>{formatMoney(teacherPaymentTotals.confirmed)}</Text>
+              <Text style={styles.muted}>Recaudado confirmado</Text>
+              <Text style={styles.metricMoneySmall}>{formatMoney(teacherPaymentTotals.pending)}</Text>
+              <Text style={styles.muted}>Pagado pendiente de confirmar</Text>
+            </WebCard>
+          ) : null}
           <WebCard style={styles.quickCard}>
             <Text style={styles.blockTitle}>Accesos rápidos</Text>
             <WebButton label="Agenda" icon="calendar-month" variant="secondary" onPress={() => router.push('/agenda')} />
@@ -295,6 +339,8 @@ const styles = StyleSheet.create({
   save: { alignSelf: 'flex-end', marginTop: 8 },
   side: { gap: 18 },
   quickCard: { gap: 12 },
+  metricMoney: { color: webTokens.color.good, fontSize: 30, fontWeight: '900' },
+  metricMoneySmall: { color: webTokens.color.warn, fontSize: 24, fontWeight: '900', marginTop: 6 },
   blockTitle: { color: webTokens.color.ink, fontSize: 22, fontWeight: '900' },
   muted: { color: webTokens.color.muted, lineHeight: 21 },
   materialGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14, marginTop: 14 },

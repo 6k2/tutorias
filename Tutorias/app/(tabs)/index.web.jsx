@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { db } from '../config/firebase';
 import { useTopAlert } from '../../components/TopAlert';
+import { useTeacherOfferStatus } from '../../features/offers/useTeacherOfferStatus';
 import {
   SubjectImage,
   WebBadge,
@@ -22,6 +23,7 @@ export default function WebHomeScreen() {
   const session = useWebSession();
   const [checking, setChecking] = useState(null);
   const isTeacher = roleIsTeacher(session.role);
+  const offerStatus = useTeacherOfferStatus(session.user?.uid, webSubjects, { disabled: !isTeacher });
 
   const goMatricula = async (subject) => {
     if (!session.user) {
@@ -90,7 +92,7 @@ export default function WebHomeScreen() {
                   onPress={() => router.push(`/inspect/${encodeURIComponent(subject.key)}?name=${encodeURIComponent(subject.title)}`)}
                   style={styles.primaryAction}
                 />
-                {isTeacher ? (
+                {isTeacher && offerStatus.canCreate(subject.key) ? (
                   <WebButton
                     label="Crear clase"
                     icon="add"

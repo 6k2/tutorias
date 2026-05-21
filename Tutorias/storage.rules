@@ -49,8 +49,19 @@ service firebase.storage {
         || request.resource.contentType.matches('application/octet-stream');
     }
 
+    function allowedChatAttachmentContentType() {
+      return request.resource.contentType.matches('image/(png|jpe?g|gif|webp)')
+        || request.resource.contentType == 'application/pdf';
+    }
+
     match /conversations/{conversationId}/{messageId}/{fileName} {
-      allow read, write: if authInConversation(conversationId);
+      allow read: if authInConversation(conversationId);
+      allow write: if authInConversation(conversationId)
+        && request.resource != null
+        && request.resource.size <= 15 * 1024 * 1024
+        && fileName.matches('^[A-Za-z0-9._\\-]{3,}$')
+        && request.resource.name.matches('^conversations/' + conversationId + '/' + messageId + '/[A-Za-z0-9._\\-]+$')
+        && allowedChatAttachmentContentType();
     }
 
     match /materials/{reservationId}/{fileName} {
@@ -64,6 +75,18 @@ service firebase.storage {
         && allowedMaterialContentType();
 
       allow delete: if reservationTeacher(reservationId);
+    }
+
+    match /profile-avatars/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource != null
+        && request.resource.size <= 5 * 1024 * 1024
+        && fileName.matches('^avatar\\.(jpg|jpeg|png|webp)$')
+        && request.resource.name.matches('^profile-avatars/' + userId + '/avatar\\.(jpg|jpeg|png|webp)$')
+        && request.resource.contentType.matches('image/(png|jpe?g|webp)');
+      allow delete: if request.auth != null && request.auth.uid == userId;
     }
 
     match /{allPaths=**} {

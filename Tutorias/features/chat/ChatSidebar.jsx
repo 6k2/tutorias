@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialIcons } from '@expo/vector-icons';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Pressable,
+  ActivityIndicator,
   Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
+import { webTokens } from '../../components/web/WebUI';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { useUserConversations } from './hooks/useConversation';
 import { usePresence } from './hooks/usePresence';
@@ -17,6 +20,8 @@ import {
   partnerFromConversation,
   stableColorForUid,
 } from './utils/profiles';
+
+const isWeb = Platform.OS === 'web';
 
 export function ChatSidebar({
   currentUid,
@@ -46,10 +51,26 @@ export function ChatSidebar({
     ? Boolean(conversationsFromCache ?? providedFromCache)
     : internal.fromCache;
 
-  const background = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
-  const borderColor = useThemeColor({}, 'icon');
-  const tintColor = useThemeColor({}, 'tint');
+  const nativeBackground = useThemeColor({}, 'background');
+  const nativeText = useThemeColor({}, 'text');
+  const nativeBorder = useThemeColor({}, 'icon');
+  const nativeTint = useThemeColor({}, 'tint');
+
+  const colors = useMemo(
+    () => ({
+      background: isWeb ? webTokens.color.surface : nativeBackground,
+      row: isWeb ? webTokens.color.surface : nativeBackground,
+      rowActive: isWeb ? webTokens.color.surfaceAlt : `${nativeTint}18`,
+      input: isWeb ? webTokens.color.input : nativeBackground,
+      text: isWeb ? webTokens.color.ink : nativeText,
+      muted: isWeb ? webTokens.color.muted : nativeBorder,
+      border: isWeb ? webTokens.color.line : `${nativeBorder}40`,
+      brand: isWeb ? webTokens.color.brand : nativeTint,
+      good: isWeb ? webTokens.color.good : '#059669',
+      chip: isWeb ? webTokens.color.chip : `${nativeBorder}12`,
+    }),
+    [nativeBackground, nativeBorder, nativeText, nativeTint]
+  );
 
   const filteredItems = useMemo(() => {
     const queryLower = search.trim().toLowerCase();
@@ -74,40 +95,54 @@ export function ChatSidebar({
     ? 'Cargando tus conversaciones...'
     : loadingEnrollments
     ? 'Verificando matriculas...'
-    : 'No hay conversaciones disponibles.';
+    : search.trim()
+    ? 'No hay conversaciones con esa busqueda.'
+    : 'Inicia una conversacion desde tus matriculas confirmadas.';
 
   const safeBottomOffset = Math.max(0, bottomOffset);
-  const scrollPaddingBottom = safeBottomOffset + 32;
+  const scrollPaddingBottom = safeBottomOffset + 24;
 
   return (
-    <View style={[styles.container, { backgroundColor: background }]}>
-      <View style={[styles.searchContainer, { borderColor: `${borderColor}40` }]}>
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Buscar"
-          placeholderTextColor={`${borderColor}aa`}
-          style={[styles.searchInput, { color: textColor, borderColor: `${borderColor}55` }]}
-        />
-        <View style={styles.headerButtons}>
-          {fromCache && (
-            <View style={[styles.cacheBadge, { borderColor: `${borderColor}44` }]}>
-              <MaterialIcons name="cloud-off" size={14} color={tintColor} />
-              <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
-            </View>
-          )}
-          {showCreateButton && typeof onCreateConversation === 'function' && (
-            <Pressable onPress={() => onCreateConversation()} style={[styles.newButton, { borderColor: `${borderColor}44` }]}> 
-              <MaterialIcons name="add-comment" size={15} color={tintColor} />
-              <Text style={{ color: tintColor, fontWeight: '800' }}>Iniciar</Text>
+    <View style={[styles.container, isWeb && styles.webContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.toolbar, isWeb && styles.webToolbar, { borderBottomColor: colors.border }]}>
+        <View style={[styles.searchBox, isWeb && styles.webSearchBox, { borderColor: colors.border, backgroundColor: colors.input }]}>
+          <MaterialIcons name="search" size={18} color={colors.muted} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Buscar por nombre, materia o mensaje"
+            placeholderTextColor={colors.muted}
+            style={[styles.searchInput, { color: colors.text }]}
+          />
+          {search ? (
+            <Pressable onPress={() => setSearch('')} accessibilityRole="button">
+              <MaterialIcons name="close" size={17} color={colors.muted} />
             </Pressable>
-          )}
+          ) : null}
         </View>
+        {showCreateButton && typeof onCreateConversation === 'function' ? (
+          <Pressable
+            onPress={() => onCreateConversation()}
+            style={[styles.newButton, isWeb && styles.webNewButton, { borderColor: colors.border, backgroundColor: colors.brand }]}
+            accessibilityRole="button"
+            accessibilityLabel="Iniciar conversacion"
+          >
+            <MaterialIcons name="add-comment" size={18} color="#fff" />
+            <Text style={styles.newButtonText}>Iniciar</Text>
+          </Pressable>
+        ) : null}
       </View>
+
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}>
-        {filteredItems.length === 0 ? (
+        {loading ? (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: borderColor }]}>{emptyCopy}</Text>
+            <ActivityIndicator color={colors.brand} />
+            <Text style={[styles.emptyText, { color: colors.muted }]}>{emptyCopy}</Text>
+          </View>
+        ) : filteredItems.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialIcons name={fromCache ? 'cloud-done' : 'forum'} size={30} color={colors.brand} />
+            <Text style={[styles.emptyText, { color: colors.muted }]}>{emptyCopy}</Text>
           </View>
         ) : (
           filteredItems.map((conversation) => (
@@ -117,9 +152,7 @@ export function ChatSidebar({
               currentUid={currentUid}
               onSelect={onSelectConversation}
               isActive={conversation.id === activeConversationId}
-              tintColor={tintColor}
-              borderColor={borderColor}
-              textColor={textColor}
+              colors={colors}
             />
           ))
         )}
@@ -133,14 +166,12 @@ function ConversationRow({
   currentUid,
   onSelect,
   isActive,
-  tintColor,
-  borderColor,
-  textColor,
+  colors,
 }) {
   const partner = partnerFromConversation(conversation, currentUid);
   const presence = usePresence(partner?.uid);
-  const lastMessage = conversation.lastMessage || 'Envia el primer mensaje';
-  const lastMessageAt = conversation.lastMessageAt;
+  const lastMessage = conversation.lastMessage || 'Sin mensajes todavia';
+  const lastMessageAt = conversation.lastMessageAt || conversation.updatedAt;
   const unread = Array.isArray(conversation.unreadBy)
     ? conversation.unreadBy.includes(currentUid)
     : false;
@@ -148,11 +179,16 @@ function ConversationRow({
   return (
     <Pressable
       onPress={() => onSelect(conversation, partner)}
-      style={[
+      style={({ hovered }) => [
         styles.item,
-        { borderBottomColor: `${borderColor}33` },
-        isActive && { backgroundColor: `${tintColor}18` },
+        isWeb && styles.webItem,
+        {
+          borderBottomColor: colors.border,
+          backgroundColor: isActive ? colors.rowActive : colors.row,
+        },
+        hovered && isWeb && !isActive && { backgroundColor: colors.chip },
       ]}
+      accessibilityRole="button"
     >
       <View style={styles.avatarWrapper}>
         {partner?.photoURL ? (
@@ -165,42 +201,39 @@ function ConversationRow({
       </View>
       <View style={styles.itemContent}>
         <View style={styles.itemHeader}>
-          <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
+          <Text style={[styles.name, isWeb && styles.webName, { color: colors.text }]} numberOfLines={1}>
             {partner?.displayName || 'Contacto'}
           </Text>
-          <Text style={[styles.time, { color: `${borderColor}aa` }]}>{formatTime(lastMessageAt)}</Text>
+          <Text style={[styles.time, { color: colors.muted }]}>{formatTime(lastMessageAt)}</Text>
         </View>
-        {conversation.enrollmentMeta?.subjectName ? (
-          <Text style={[styles.subject, { color: `${borderColor}aa` }]} numberOfLines={1}>
-            {conversation.enrollmentMeta.subjectName}
-          </Text>
-        ) : null}
-        {partner?.relationship ? (
-          <Text style={[styles.relationship, { color: `${borderColor}aa` }]} numberOfLines={1}>
-            {partner.relationship}
-          </Text>
-        ) : null}
+        <Text style={[styles.subject, { color: colors.muted }]} numberOfLines={1}>
+          {[conversation.enrollmentMeta?.subjectName || partner?.subjectName, partner?.relationship]
+            .filter(Boolean)
+            .join(' · ') || 'Matricula confirmada'}
+        </Text>
         <View style={styles.itemFooter}>
           <Text
             style={[
               styles.preview,
-              { color: unread ? tintColor : `${borderColor}cc` },
+              { color: unread ? colors.text : colors.muted, fontWeight: unread ? '900' : '600' },
             ]}
             numberOfLines={1}
           >
             {lastMessage}
           </Text>
+          {unread ? <View style={[styles.unreadDot, { backgroundColor: colors.brand }]} /> : null}
+        </View>
+        <View style={styles.presenceRow}>
           <View
             style={[
               styles.presenceDot,
-              { backgroundColor: presence.online ? '#059669' : `${borderColor}55` },
+              { backgroundColor: presence.online ? colors.good : colors.muted },
             ]}
           />
-          {unread && <View style={[styles.unreadDot, { backgroundColor: tintColor }]} />}
+          <Text style={[styles.presenceText, { color: colors.muted }]} numberOfLines={1}>
+            {presence.online ? 'En linea' : formatPresence(presence.lastSeen)}
+          </Text>
         </View>
-        <Text style={[styles.presenceText, { color: `${borderColor}aa` }]}>
-          {presence.online ? 'En linea' : formatPresence(presence.lastSeen)}
-        </Text>
       </View>
     </Pressable>
   );
@@ -230,56 +263,67 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
+  webContainer: {
+    minHeight: 0,
+  },
+  toolbar: {
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 10,
   },
-  searchInput: {
-    borderRadius: 16,
+  webToolbar: {
+    padding: 14,
+  },
+  searchBox: {
+    minHeight: 42,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  cacheBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginLeft: 8,
+  },
+  webSearchBox: {
+    minHeight: 44,
+    borderRadius: 12,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 9,
+    outlineStyle: 'none',
   },
   newButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    minHeight: 38,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
-  cacheBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+  webNewButton: {
+    borderRadius: 12,
+  },
+  newButtonText: {
+    color: '#fff',
+    fontWeight: '900',
   },
   scrollContent: {
-    paddingTop: 8,
+    paddingTop: 6,
   },
   emptyState: {
+    minHeight: 220,
     padding: 24,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
   },
   emptyText: {
     fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   item: {
     flexDirection: 'row',
@@ -287,10 +331,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  webItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
   avatarWrapper: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 16,
     overflow: 'hidden',
     marginRight: 12,
     justifyContent: 'center',
@@ -303,7 +351,7 @@ const styles = StyleSheet.create({
   avatarFallback: {
     width: '100%',
     height: '100%',
-    borderRadius: 24,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -314,38 +362,40 @@ const styles = StyleSheet.create({
   },
   itemContent: {
     flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  itemFooter: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   name: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
     flex: 1,
-    marginRight: 8,
+  },
+  webName: {
+    fontWeight: '900',
   },
   subject: {
     fontSize: 12,
-    marginBottom: 2,
-  },
-  relationship: {
-    fontSize: 11,
-    marginBottom: 2,
+    marginTop: 3,
     fontWeight: '700',
   },
   time: {
     fontSize: 12,
+    fontWeight: '700',
+  },
+  itemFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
   },
   preview: {
-    fontSize: 14,
+    fontSize: 13,
     flex: 1,
   },
   unreadDot: {
@@ -353,13 +403,20 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  presenceRow: {
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   presenceDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
+    opacity: 0.9,
   },
   presenceText: {
     fontSize: 11,
-    marginTop: 2,
+    fontWeight: '700',
   },
 });

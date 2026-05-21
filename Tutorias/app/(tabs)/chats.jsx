@@ -129,7 +129,6 @@ export default function ChatsScreen() {
         }
         isThreadOpen={Boolean(chat.activeConversation)}
         onBack={() => chat.selectConversation(null)}
-        offline={chat.connectivity.isOffline}
       />
     </View>
   );

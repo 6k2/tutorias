@@ -3,7 +3,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { View, StyleSheet, useWindowDimensions, Pressable, Text } from 'react-native';
 import { useThemeColor } from '../../hooks/useThemeColor';
 
-export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = false }) {
+export function ChatLayout({ sidebar, thread, isThreadOpen, onBack }) {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
 
@@ -11,29 +11,18 @@ export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = fa
   const divider = useThemeColor({}, 'icon');
   const text = useThemeColor({}, 'text');
   const tint = useThemeColor({}, 'tint');
-  const offlineBg = useThemeColor({}, 'background');
-
-  const OfflineBanner = () =>
-    offline ? (
-      <View
-        style={[styles.offlineBanner, { borderColor: `${divider}40`, backgroundColor: `${offlineBg}ee` }]}
-      >
-        <MaterialIcons name="cloud-off" size={16} color={tint} />
-        <Text style={[styles.offlineText, { color: text }]}>Sin conexion</Text>
-      </View>
-    ) : null;
 
   if (isSmallScreen) {
     return (
       <View style={[styles.container, { backgroundColor: background }]}>
-        <OfflineBanner />
         {isThreadOpen ? (
           <View style={styles.threadWrapper}>
             <Pressable
               style={[styles.backRow, { borderBottomColor: `${divider}40` }]}
               onPress={onBack}
             >
-              <Text style={[styles.backText, { color: text }]}>Volver</Text>
+              <MaterialIcons name="arrow-back" size={19} color={tint} />
+              <Text style={[styles.backText, { color: text }]}>Chats</Text>
             </Pressable>
             {thread}
           </View>
@@ -46,7 +35,6 @@ export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = fa
 
   return (
     <View style={[styles.container, { backgroundColor: background }]}>
-      <OfflineBanner />
       <View style={styles.desktopRow}>
         <View style={[styles.sidebarWrapper, { borderRightColor: `${divider}40` }]}>{sidebar}</View>
         <View style={styles.threadWrapper}>{thread}</View>
@@ -75,29 +63,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backText: {
     fontSize: 15,
-    fontWeight: '600',
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    margin: 12,
-  },
-  offlineIcon: {
-    fontWeight: '700',
-  },
-  offlineText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '900',
   },
 });

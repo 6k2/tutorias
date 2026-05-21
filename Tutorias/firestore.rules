@@ -238,6 +238,16 @@ service cloud.firestore {
         && offerExists(request.resource.data.offerId)
         && request.resource.data.teacherId == offerData(request.resource.data.offerId).uid
         && request.resource.data.status == 'pending'
+        && request.resource.data.paymentStatus == 'paid'
+        && request.resource.data.paymentMethod in ['card', 'paypal']
+        && request.resource.data.paymentBrand is string
+        && request.resource.data.paymentLast4 is string
+        && request.resource.data.paymentAmount is number
+        && request.resource.data.paymentAmount == request.resource.data.price
+        && request.resource.data.paymentCurrency == 'USD'
+        && request.resource.data.paymentReference is string
+        && request.resource.data.paymentReference.matches('^SIM-[A-Z]+-[A-Z0-9]+-[A-Z0-9]+$')
+        && request.resource.data.paidAt == request.time
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && request.resource.data.keys().hasOnly([
@@ -251,6 +261,14 @@ service cloud.firestore {
           'price',
           'studentDisplayName',
           'teacherDisplayName',
+          'paymentStatus',
+          'paymentMethod',
+          'paymentBrand',
+          'paymentLast4',
+          'paymentAmount',
+          'paymentCurrency',
+          'paymentReference',
+          'paidAt',
           'createdAt',
           'updatedAt'
         ]);
@@ -259,6 +277,11 @@ service cloud.firestore {
     function authOwnsReservationDoc() {
       return isSignedIn()
         && (resource.data.teacherId == request.auth.uid || resource.data.studentId == request.auth.uid);
+    }
+
+    function authOwnsReservationId(reservationId) {
+      return isSignedIn()
+        && reservationId.matches('^.+_' + request.auth.uid + '$');
     }
 
     function validReservationStatusUpdate() {
@@ -304,6 +327,7 @@ service cloud.firestore {
     }
 
     match /reservations/{reservationId} {
+      allow get: if authOwnsReservationId(reservationId);
       allow read: if authOwnsReservationDoc()
         || (isSignedIn() && resource.data.status == 'confirmed');
       allow create: if isSignedIn() && validReservationCreate();

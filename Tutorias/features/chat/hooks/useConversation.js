@@ -193,6 +193,9 @@ export function useUserConversations(uid, options = {}) {
     setLoading(true);
     const watchers = conversationWatchers.current;
     const keysById = conversationKeysById.current;
+    const fallbackTimer = setTimeout(() => {
+      setLoading(false);
+    }, 4500);
     const participantsQuery = query(
       collectionGroup(db, 'participants'),
       where('uid', '==', uid)
@@ -201,6 +204,7 @@ export function useUserConversations(uid, options = {}) {
     const unsubscribeParticipants = onSnapshot(
       participantsQuery,
       (snapshot) => {
+        clearTimeout(fallbackTimer);
         setFromCache((prev) => prev || snapshot.metadata?.fromCache || false);
         const nextConversationIds = new Set();
         snapshot.forEach((docSnapshot) => {
@@ -239,6 +243,7 @@ export function useUserConversations(uid, options = {}) {
               conversationKeysById.current.set(conversationId, data.conversationKey);
               if (!isConversationAllowed(data)) {
                 dropConversation(conversationId);
+                setLoading(false);
                 return;
               }
 
@@ -273,6 +278,7 @@ export function useUserConversations(uid, options = {}) {
             },
             (error) => {
               console.error('chat: failed conversation watch', error);
+              setLoading(false);
             }
           );
 
@@ -282,8 +288,15 @@ export function useUserConversations(uid, options = {}) {
         if (nextConversationIds.size === 0) {
           setLoading(false);
         }
+        if (
+          nextConversationIds.size > 0 &&
+          [...nextConversationIds].every((conversationId) => conversationWatchers.current.has(conversationId))
+        ) {
+          setLoading(false);
+        }
       },
       (error) => {
+        clearTimeout(fallbackTimer);
         console.error('chat: participants watch failed', error);
         setItems([]);
         setLoading(false);
@@ -291,6 +304,7 @@ export function useUserConversations(uid, options = {}) {
     );
 
     return () => {
+      clearTimeout(fallbackTimer);
       unsubscribeParticipants();
       watchers.forEach((unsubscribe) => unsubscribe());
       watchers.clear();
@@ -317,5 +331,6 @@ export function useUserConversations(uid, options = {}) {
 }
 
 export function getConversationPartner(conversation, currentUid) {
+  if (!conversation || !currentUid) return null;
   return partnerFromConversation(conversation, currentUid);
 }

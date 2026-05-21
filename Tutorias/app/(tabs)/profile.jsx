@@ -30,6 +30,9 @@ import { useMaterialDownloadQueue } from '../../features/materials/hooks/useMate
 import { useMaterialsByReservation } from '../../features/materials/hooks/useMaterialsByReservation';
 import { useOfflineMaterial } from '../../features/materials/hooks/useOfflineMaterial';
 import { toMillis } from '../../features/materials/utils/dates';
+import { formatMoney, paymentTotals } from '../../features/payments';
+import { resolveProfileAvatar, syncChatProfileForUser } from '../../features/profile/avatar';
+import { useReservations } from '../../hooks/useReservations';
 
 const TAB_BAR_OVERLAY = 110;
 
@@ -51,6 +54,7 @@ export default function ProfileScreen() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const allSubjects = useMemo(() => [
     'Cálculo',
@@ -65,11 +69,13 @@ export default function ProfileScreen() {
   const [activeReservation, setActiveReservation] = useState(null);
   const normalizedRole = String(role || '').toLowerCase();
   const isStudent = normalizedRole === 'student';
+  const isTeacher = normalizedRole === 'teacher';
   const studentEnrollments = useConfirmedEnrollments(
     isStudent ? user?.uid : null,
     'student',
     { disabled: !isStudent }
   );
+  const teacherReservations = useReservations(role, isTeacher ? user?.uid : null, { disabled: !isTeacher });
   const materialsInbox = useMaterialsInbox(isStudent ? user?.uid : null, {
     disabled: !isStudent,
   });
@@ -106,9 +112,18 @@ export default function ProfileScreen() {
     JSON.stringify([...specialties].sort()) !== JSON.stringify([...initialData.specialties].sort())
   );
 
-  const confirmedReservations = isStudent ? studentEnrollments.reservations || [] : [];
-  const materialsByReservation = materialsInbox.byReservation || new Map();
-  const materialViews = materialsInbox.views || {};
+  const confirmedReservations = useMemo(
+    () => (isStudent ? studentEnrollments.reservations || [] : []),
+    [isStudent, studentEnrollments.reservations]
+  );
+  const materialsByReservation = useMemo(
+    () => materialsInbox.byReservation || new Map(),
+    [materialsInbox.byReservation]
+  );
+  const materialViews = useMemo(
+    () => materialsInbox.views || {},
+    [materialsInbox.views]
+  );
   const totalNewMaterials = materialsInbox.newCount || 0;
 
   const getMaterialsForReservation = useCallback(
@@ -143,8 +158,15 @@ export default function ProfileScreen() {
   }, [confirmedReservations, getMaterialsForReservation, materialViews, isStudent]);
 
   const hasAnyMaterial = studentMaterialCards.some((card) => card.total > 0);
+  const teacherPaymentTotals = useMemo(
+    () => paymentTotals(teacherReservations.reservations || []),
+    [teacherReservations.reservations]
+  );
 
-  const markMaterialViewed = materialsInbox.markMaterialViewed || (() => Promise.resolve());
+  const markMaterialViewed = useMemo(
+    () => materialsInbox.markMaterialViewed || (() => Promise.resolve()),
+    [materialsInbox.markMaterialViewed]
+  );
 
   const handleOpenMaterials = useCallback(
     (reservation) => {
@@ -188,18 +210,41 @@ export default function ProfileScreen() {
 
   // Save only the editable fields (photo, description, specialties)
   const saveProfile = async () => {
+    setSaving(true);
     try {
       if (!user) return;
+      const avatar = await resolveProfileAvatar({
+        uid: user.uid,
+        uri: photoURL,
+        fallbackURL: initialData.photoURL,
+      });
+      const remotePhotoURL = avatar.photoURL;
       await setDoc(doc(db, 'users', user.uid), {
-        photoURL: photoURL || '',
+        photoURL: remotePhotoURL,
         description: description.trim(),
         specialties,
       }, { merge: true });
-      setInitialData({ photoURL, description: description.trim(), specialties });
-      topAlert.show('Cambios guardados :)', 'success');
+      setPhotoURL(remotePhotoURL);
+      setInitialData({ photoURL: remotePhotoURL, description: description.trim(), specialties });
+      try {
+        await syncChatProfileForUser({
+          uid: user.uid,
+          displayName: username || email || user.email || user.uid,
+          photoURL: remotePhotoURL,
+          role,
+        });
+      } catch (syncError) {
+        console.warn('Profile: chat profile sync failed', syncError);
+      }
+      topAlert.show(
+        avatar.uploadFailed ? 'Cambios guardados, pero no se pudo subir la foto' : 'Cambios guardados :)',
+        avatar.uploadFailed ? 'error' : 'success'
+      );
     } catch (_error) {
       console.error('Profile: save failed', _error);
       topAlert.show('No se pudieron guardar los cambios', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -341,6 +386,27 @@ export default function ProfileScreen() {
         {specialties.length > 0 && <MaterialIcons name="check-circle" color="#34D399" size={20} />}
       </TouchableOpacity>
 
+      {isTeacher && (
+        <View style={styles.revenueCard}>
+          <View style={styles.materialsHeader}>
+            <View style={styles.materialsHeaderLeft}>
+              <MaterialIcons name="payments" size={20} color="#fff" />
+              <Text style={styles.sectionTitle}>Recaudo</Text>
+            </View>
+          </View>
+          <View style={styles.moneyRow}>
+            <View style={styles.moneyBox}>
+              <Text style={styles.moneyValue}>{formatMoney(teacherPaymentTotals.confirmed)}</Text>
+              <Text style={styles.moneyLabel}>Confirmado</Text>
+            </View>
+            <View style={styles.moneyBox}>
+              <Text style={[styles.moneyValue, styles.moneyPending]}>{formatMoney(teacherPaymentTotals.pending)}</Text>
+              <Text style={styles.moneyLabel}>Pendiente</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       {isStudent && (
         <View style={styles.materialsSection}>
           <View style={styles.materialsHeader}>
@@ -414,8 +480,8 @@ export default function ProfileScreen() {
       )}
 
       {hasChanges && (
-        <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
-          <Text style={styles.saveBtnText}>Guardar cambios</Text>
+        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.65 }]} onPress={saveProfile} disabled={saving}>
+          <Text style={styles.saveBtnText}>{saving ? 'Guardando...' : 'Guardar cambios'}</Text>
         </TouchableOpacity>
       )}
 
@@ -695,6 +761,22 @@ const styles = StyleSheet.create({
   },
   selectorBoxActive: { backgroundColor: '#3A3D5A' },
   selectorText: { color: '#fff', marginLeft: 10 },
+  revenueCard: {
+    marginTop: 20,
+    backgroundColor: '#2C2F48',
+    borderRadius: 14,
+    padding: 14,
+  },
+  moneyRow: { flexDirection: 'row', gap: 10 },
+  moneyBox: {
+    flex: 1,
+    backgroundColor: '#232647',
+    borderRadius: 12,
+    padding: 12,
+  },
+  moneyValue: { color: '#34D399', fontSize: 22, fontWeight: '900' },
+  moneyPending: { color: '#FFD580' },
+  moneyLabel: { color: '#C7C9D9', fontSize: 12, fontWeight: '700', marginTop: 4 },
   materialsSection: {
     marginTop: 20,
     backgroundColor: '#2C2F48',

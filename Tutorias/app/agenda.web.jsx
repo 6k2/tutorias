@@ -20,6 +20,7 @@ import { useTopAlert } from '../components/TopAlert';
 import { RESERVATION_STATUS } from '../constants/firestore';
 import { useAuthGuard } from '../hooks/useAuthGuard';
 import { markReservationSynced, updateReservationStatus, updateReservationStatusOffline, useReservations } from '../hooks/useReservations';
+import { formatMoney, paymentTotals } from '../features/payments';
 import { useConnectivity, useOfflineSync } from '../tools/offline';
 
 export default function AgendaWebScreen() {
@@ -81,6 +82,11 @@ export default function AgendaWebScreen() {
     pending: reservations.filter((item) => item.status === RESERVATION_STATUS.PENDING),
     confirmed: reservations.filter((item) => item.status === RESERVATION_STATUS.CONFIRMED),
   }), [reservations]);
+  const totals = useMemo(() => paymentTotals(reservations), [reservations]);
+  const paidRows = useMemo(
+    () => reservations.filter((item) => item.paymentStatus === 'paid'),
+    [reservations]
+  );
 
   const changeStatus = async (reservationId, nextStatus) => {
     if (!reservationId || !user?.uid) return;
@@ -116,6 +122,7 @@ export default function AgendaWebScreen() {
             <TabButton label="Pendientes" count={groups.pending.length} active={activeTab === 'pending'} onPress={() => setActiveTab('pending')} />
             <TabButton label="Confirmadas" count={groups.confirmed.length} active={activeTab === 'confirmed'} onPress={() => setActiveTab('confirmed')} />
           </View>
+          {isTeacher ? <RevenuePanel totals={totals} rows={paidRows} /> : null}
           {visible.length === 0 ? (
             <EmptyState icon="event-busy" title="Nada por aquí" text={activeTab === 'pending' ? 'No hay solicitudes pendientes.' : 'No hay reservas confirmadas.'} />
           ) : (
@@ -148,6 +155,42 @@ export default function AgendaWebScreen() {
   );
 }
 
+function RevenuePanel({ totals, rows }) {
+  return (
+    <WebCard style={styles.revenueCard}>
+      <View style={styles.rowTop}>
+        <View>
+          <Text style={styles.blockTitle}>Recaudo</Text>
+          <Text style={styles.muted}>Pagos simulados asociados a tus tutorías.</Text>
+        </View>
+        <WebBadge tone="green" icon="payments">{totals.count} pago(s)</WebBadge>
+      </View>
+      <View style={styles.revenueGrid}>
+        <Metric title="Recaudado confirmado" value={formatMoney(totals.confirmed)} tone="green" />
+        <Metric title="Pagado pendiente" value={formatMoney(totals.pending)} tone="amber" />
+      </View>
+      {rows.slice(0, 5).map((item) => (
+        <View key={item.id} style={styles.paymentRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>{item.subjectName || 'Tutoría'}</Text>
+            <Text style={styles.muted}>{item.studentDisplayName || item.studentId} · {item.statusLabel || item.status}</Text>
+          </View>
+          <Text style={styles.slot}>{formatMoney(item.paymentAmount ?? item.price)}</Text>
+        </View>
+      ))}
+    </WebCard>
+  );
+}
+
+function Metric({ title, value, tone }) {
+  return (
+    <View style={[styles.revenueMetric, tone === 'green' ? styles.metricGreen : styles.metricAmber]}>
+      <Text style={styles.revenueValue}>{value}</Text>
+      <Text style={styles.revenueLabel}>{title}</Text>
+    </View>
+  );
+}
+
 function TabButton({ label, count, active, onPress }) {
   return (
     <Pressable style={[styles.tab, active && styles.tabActive]} onPress={onPress}>
@@ -166,6 +209,14 @@ const styles = StyleSheet.create({
   count: { backgroundColor: webTokens.color.chip, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   countText: { color: webTokens.color.brand, fontWeight: '900', fontSize: 12 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 },
+  revenueCard: { gap: 14 },
+  revenueGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
+  revenueMetric: { borderRadius: 16, padding: 16, borderWidth: 1 },
+  metricGreen: { backgroundColor: webTokens.color.goodSoft, borderColor: webTokens.color.good },
+  metricAmber: { backgroundColor: webTokens.color.warnSoft, borderColor: webTokens.color.warn },
+  revenueValue: { color: webTokens.color.ink, fontSize: 24, fontWeight: '900' },
+  revenueLabel: { color: webTokens.color.muted, marginTop: 4, fontWeight: '800' },
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderTopWidth: 1, borderTopColor: webTokens.color.line, paddingTop: 12 },
   reservationCard: { gap: 12 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   iconWrap: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: webTokens.color.chip },

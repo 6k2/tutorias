@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { auth, db } from "../config/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { useTopAlert } from "../../components/TopAlert";
+import { useTeacherOfferStatus } from "../../features/offers/useTeacherOfferStatus";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -82,6 +83,8 @@ export default function HomeScreen() {
     ],
     []
   );
+  const isTeacher = (role || '').toLowerCase() === 'teacher';
+  const offerStatus = useTeacherOfferStatus(uid, subjects, { disabled: !isTeacher });
 
   const cardAnims = useRef(subjects.map(() => new Animated.Value(0))).current;
   const cardYs = useRef(Array(subjects.length).fill(undefined)).current;
@@ -197,7 +200,7 @@ export default function HomeScreen() {
                     >
                       <Text style={styles.inspectText}>INSPECCIONAR</Text>
                     </TouchableOpacity>
-{(role || '').toLowerCase() === 'teacher' && (
+                    {isTeacher && offerStatus.canCreate(s.key) && (
                       <TouchableOpacity
                         style={styles.matricularBtn}
                         onPress={async () => {
