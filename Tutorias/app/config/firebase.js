@@ -50,6 +50,7 @@ let _db;
 if (Platform.OS === "web") {
   _db = getFirestore(app);
 } else {
+<<<<<<< HEAD
   const nativeFirestoreSettings = {
     experimentalAutoDetectLongPolling: true,
     useFetchStreams: false,
@@ -60,6 +61,8 @@ if (Platform.OS === "web") {
     ...options,
   });
 
+=======
+>>>>>>> parent of 68c1754 (Add web UI screens and tab layout)
   try {
     _db = initializeFirestore(
       app,

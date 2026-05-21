@@ -8,9 +8,13 @@ import { useColorScheme } from './useColorScheme';
 import { useThemeOverride } from './useThemeOverride';
 
 export function useThemeColor(props, colorName) {
+<<<<<<< HEAD
   const override = useThemeOverride();
   const colorScheme = useColorScheme();
   const theme = override ?? colorScheme ?? 'light';
+=======
+  const theme = useColorScheme() ?? 'light';
+>>>>>>> parent of 68c1754 (Add web UI screens and tab layout)
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
