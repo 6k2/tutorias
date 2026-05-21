@@ -16,17 +16,29 @@ export function ChatSidebar({
   currentUid,
   onSelectConversation,
   activeConversationId,
+  conversations: providedConversations,
+  loadingConversations,
+  conversationsFromCache,
+  fromCache: providedFromCache,
   allowedKeys,
   metaByKey,
   loadingEnrollments,
   onCreateConversation,
+  showCreateButton = true,
   bottomOffset = 0,
 }) {
   const [search, setSearch] = useState('');
-  const { items, loading, fromCache } = useUserConversations(currentUid, {
+  const hasProvidedConversations = Array.isArray(providedConversations);
+  const internal = useUserConversations(currentUid, {
     allowedKeys,
     metaByKey,
+    disabled: hasProvidedConversations,
   });
+  const items = hasProvidedConversations ? providedConversations : internal.items;
+  const loading = hasProvidedConversations ? Boolean(loadingConversations) : internal.loading;
+  const fromCache = hasProvidedConversations
+    ? Boolean(conversationsFromCache ?? providedFromCache)
+    : internal.fromCache;
 
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
@@ -68,9 +80,9 @@ export function ChatSidebar({
               <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
             </View>
           )}
-          {typeof onCreateConversation === 'function' && (
+          {showCreateButton && typeof onCreateConversation === 'function' && (
             <Pressable onPress={() => onCreateConversation()} style={[styles.newButton, { borderColor: `${borderColor}44` }]}> 
-              <Text style={{ color: tintColor, fontWeight: '700' }}>Nuevo</Text>
+              <Text style={{ color: tintColor, fontWeight: '700' }}>Iniciar</Text>
             </Pressable>
           )}
         </View>

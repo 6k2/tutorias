@@ -91,7 +91,7 @@ export default function InspectSubjectWebScreen() {
     <WebShell
       title={`Docentes en ${subjectName}`}
       subtitle="Compara cupos, precio y primer horario disponible antes de entrar al detalle de reserva."
-      active="/explore"
+      active="/"
       actions={<WebButton label="Volver" icon="arrow-back" variant="secondary" onPress={() => router.back()} />}
     >
       {(connectivity.isOffline || fromCache) ? (
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 18,
-    backgroundColor: '#EEF4FF',
+    backgroundColor: webTokens.color.chip,
     alignItems: 'center',
     justifyContent: 'center',
   },

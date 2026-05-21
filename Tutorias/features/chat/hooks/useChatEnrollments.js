@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useConfirmedEnrollments } from '../../materials/hooks/useConfirmedEnrollments';
-import { ensureConversationRecord } from '../api/conversations';
 
 const emptySet = new Set();
 const emptyMap = new Map();
@@ -8,10 +7,7 @@ const emptyMap = new Map();
 export function useChatEnrollments(currentUser) {
   const uid = currentUser?.uid || null;
   const role = currentUser?.role || null;
-  const normalizedRole = String(role || 'student').toLowerCase();
   const { reservations, loading, fromCache } = useConfirmedEnrollments(uid, role);
-  const ensuredKeysRef = useRef(new Set());
-  const ensuringKeysRef = useRef(new Set());
 
   const records = useMemo(() => {
     if (!reservations.length) return [];
@@ -58,58 +54,6 @@ export function useChatEnrollments(currentUser) {
     });
     return map;
   }, [records]);
-
-  useEffect(() => {
-    ensuredKeysRef.current = new Set();
-    ensuringKeysRef.current = new Set();
-  }, [uid]);
-
-  useEffect(() => {
-    if (!uid || !currentUser) return;
-
-    records.forEach((record) => {
-      if (!record.conversationKey) return;
-      if (
-        ensuredKeysRef.current.has(record.conversationKey) ||
-        ensuringKeysRef.current.has(record.conversationKey)
-      ) {
-        return;
-      }
-
-      const partner =
-        normalizedRole === 'teacher'
-          ? {
-              uid: record.studentId,
-              displayName: record.studentDisplayName || 'Sin nombre',
-              role: 'student',
-            }
-          : {
-              uid: record.teacherId,
-              displayName: record.teacherDisplayName || 'Sin nombre',
-              role: 'teacher',
-            };
-
-      if (!partner.uid) {
-        return;
-      }
-
-      ensuringKeysRef.current.add(record.conversationKey);
-      ensureConversationRecord({
-        myUser: currentUser,
-        otherUser: partner,
-        meta: record,
-      })
-        .then(() => {
-          ensuredKeysRef.current.add(record.conversationKey);
-        })
-        .catch((error) => {
-          console.error('useChatEnrollments: failed to ensure conversation', error);
-        })
-        .finally(() => {
-          ensuringKeysRef.current.delete(record.conversationKey);
-        });
-    });
-  }, [records, uid, normalizedRole, currentUser]);
 
   return {
     enrollments: records,

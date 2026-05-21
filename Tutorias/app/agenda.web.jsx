@@ -12,6 +12,7 @@ import {
   WebCard,
   WebShell,
   formatSlot,
+  getProfileRole,
   roleIsTeacher,
   webTokens,
 } from '../components/web/WebUI';
@@ -49,7 +50,7 @@ export default function AgendaWebScreen() {
       }
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
-        if (alive) setRole(snap.data()?.role || '');
+        if (alive) setRole(getProfileRole(snap.data()));
       } finally {
         if (alive) setRoleLoading(false);
       }
@@ -157,17 +158,17 @@ function TabButton({ label, count, active, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  tabs: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 18, padding: 6, borderWidth: 1, borderColor: webTokens.color.line, alignSelf: 'flex-start', gap: 6 },
+  tabs: { flexDirection: 'row', backgroundColor: webTokens.color.elevated, borderRadius: 18, padding: 6, borderWidth: 1, borderColor: webTokens.color.line, alignSelf: 'flex-start', gap: 6 },
   tab: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 14 },
   tabActive: { backgroundColor: webTokens.color.brand },
   tabText: { color: webTokens.color.muted, fontWeight: '900' },
   tabTextActive: { color: '#FFFFFF' },
-  count: { backgroundColor: '#EEF4FF', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  count: { backgroundColor: webTokens.color.chip, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   countText: { color: webTokens.color.brand, fontWeight: '900', fontSize: 12 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 },
   reservationCard: { gap: 12 },
   rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  iconWrap: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF4FF' },
+  iconWrap: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: webTokens.color.chip },
   cardTitle: { color: webTokens.color.ink, fontSize: 21, fontWeight: '900' },
   muted: { color: webTokens.color.muted, lineHeight: 21 },
   slot: { color: webTokens.color.brand, fontWeight: '900' },

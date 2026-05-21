@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { usePathname, useRouter } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -20,9 +20,47 @@ import { auth, db } from '../../app/config/firebase';
 
 export const webTokens = {
   color: {
+    bg: 'var(--web-bg)',
+    surface: 'var(--web-surface)',
+    elevated: 'var(--web-elevated)',
+    surfaceAlt: 'var(--web-surface-alt)',
+    chip: 'var(--web-chip)',
+    input: 'var(--web-input)',
+    ink: 'var(--web-ink)',
+    muted: 'var(--web-muted)',
+    line: 'var(--web-line)',
+    brand: 'var(--web-brand)',
+    brand2: 'var(--web-brand-2)',
+    brand3: 'var(--web-brand-3)',
+    good: 'var(--web-good)',
+    goodSoft: 'var(--web-good-soft)',
+    warn: 'var(--web-warn)',
+    warnSoft: 'var(--web-warn-soft)',
+    bad: 'var(--web-bad)',
+    badSoft: 'var(--web-bad-soft)',
+    onBrand: '#FFFFFF',
+    heroText: 'var(--web-hero-text)',
+    overlay: 'var(--web-overlay)',
+    dark: 'var(--web-dark)',
+  },
+  shadow: {
+    soft: {
+      boxShadow: 'var(--web-shadow-soft)',
+    },
+    lift: {
+      boxShadow: 'var(--web-shadow-lift)',
+    },
+  },
+};
+
+export const webThemes = {
+  light: {
     bg: '#F6F8FC',
     surface: '#FFFFFF',
+    elevated: '#FFFFFF',
     surfaceAlt: '#EEF3FF',
+    chip: '#EEF4FF',
+    input: '#FFFFFF',
     ink: '#172033',
     muted: '#667085',
     line: '#D9E2F2',
@@ -35,17 +73,129 @@ export const webTokens = {
     warnSoft: '#FEF3C7',
     bad: '#DC2626',
     badSoft: '#FEE2E2',
+    heroText: '#EAF2FF',
+    overlay: 'rgba(15,23,42,.45)',
     dark: '#111827',
+    shadowSoft: '0 18px 60px rgba(15, 23, 42, 0.10)',
+    shadowLift: '0 24px 80px rgba(37, 99, 235, 0.20)',
+    sidebarGradient: ['#E0F2FE', '#FFFFFF'],
+    authGradient: ['#2563EB', '#06B6D4', '#F97316'],
   },
-  shadow: {
-    soft: {
-      boxShadow: '0 18px 60px rgba(15, 23, 42, 0.10)',
-    },
-    lift: {
-      boxShadow: '0 24px 80px rgba(37, 99, 235, 0.20)',
-    },
+  dark: {
+    bg: '#070B14',
+    surface: '#101827',
+    elevated: '#151F32',
+    surfaceAlt: '#1B2A44',
+    chip: '#172A46',
+    input: '#0B1220',
+    ink: '#F7FAFF',
+    muted: '#A7B3C8',
+    line: '#263752',
+    brand: '#7CA7FF',
+    brand2: '#38D5E8',
+    brand3: '#FFB86B',
+    good: '#34D399',
+    goodSoft: '#083B2B',
+    warn: '#FBBF24',
+    warnSoft: '#3F2A08',
+    bad: '#F87171',
+    badSoft: '#451A1A',
+    heroText: '#D9E7FF',
+    overlay: 'rgba(3,7,18,.72)',
+    dark: '#F8FAFC',
+    shadowSoft: '0 20px 70px rgba(0, 0, 0, 0.38)',
+    shadowLift: '0 28px 90px rgba(56, 213, 232, 0.22)',
+    sidebarGradient: ['#10203A', '#151F32'],
+    authGradient: ['#0B1220', '#1E3A8A', '#0E7490'],
   },
 };
+
+const WebThemeContext = createContext(null);
+const THEME_KEY = 'tutorias:web-theme';
+
+function themeToCss(theme) {
+  return `
+    :root[data-tutorias-theme="${theme.name}"] {
+      --web-bg: ${theme.bg};
+      --web-surface: ${theme.surface};
+      --web-elevated: ${theme.elevated};
+      --web-surface-alt: ${theme.surfaceAlt};
+      --web-chip: ${theme.chip};
+      --web-input: ${theme.input};
+      --web-ink: ${theme.ink};
+      --web-muted: ${theme.muted};
+      --web-line: ${theme.line};
+      --web-brand: ${theme.brand};
+      --web-brand-2: ${theme.brand2};
+      --web-brand-3: ${theme.brand3};
+      --web-good: ${theme.good};
+      --web-good-soft: ${theme.goodSoft};
+      --web-warn: ${theme.warn};
+      --web-warn-soft: ${theme.warnSoft};
+      --web-bad: ${theme.bad};
+      --web-bad-soft: ${theme.badSoft};
+      --web-hero-text: ${theme.heroText};
+      --web-overlay: ${theme.overlay};
+      --web-dark: ${theme.dark};
+      --web-shadow-soft: ${theme.shadowSoft};
+      --web-shadow-lift: ${theme.shadowLift};
+      color-scheme: ${theme.name};
+    }
+  `;
+}
+
+export function WebThemeProvider({ children }) {
+  const [themeName, setThemeName] = useState('light');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage?.getItem(THEME_KEY);
+    if (stored === 'light' || stored === 'dark') {
+      setThemeName(stored);
+      return;
+    }
+    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    setThemeName(prefersDark ? 'dark' : 'light');
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const theme = { name: themeName, ...webThemes[themeName] };
+    let styleTag = document.getElementById('tutorias-web-theme');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'tutorias-web-theme';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = `${themeToCss({ name: 'light', ...webThemes.light })}\n${themeToCss({ name: 'dark', ...webThemes.dark })}`;
+    document.documentElement.setAttribute('data-tutorias-theme', themeName);
+    document.documentElement.style.backgroundColor = theme.bg;
+    window.localStorage?.setItem(THEME_KEY, themeName);
+  }, [themeName]);
+
+  const value = useMemo(() => {
+    const colors = webThemes[themeName];
+    return {
+      themeName,
+      colors,
+      isDark: themeName === 'dark',
+      setThemeName,
+      toggleTheme: () => setThemeName((current) => (current === 'dark' ? 'light' : 'dark')),
+    };
+  }, [themeName]);
+
+  return <WebThemeContext.Provider value={value}>{children}</WebThemeContext.Provider>;
+}
+
+export function useWebTheme() {
+  return useContext(WebThemeContext) || {
+    themeName: 'light',
+    colors: webThemes.light,
+    isDark: false,
+    setThemeName: () => {},
+    toggleTheme: () => {},
+  };
+}
 
 export const webSubjects = [
   {
@@ -53,44 +203,48 @@ export const webSubjects = [
     title: 'Cálculo',
     tag: 'Matemáticas',
     tone: '#2563EB',
-    image: 'https://picsum.photos/seed/tutorias-calculo/1400/900',
+    image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=1600&auto=format&fit=crop',
   },
   {
     key: 'software',
     title: 'Software',
     tag: 'Tecnología',
     tone: '#06B6D4',
-    image: 'https://picsum.photos/seed/tutorias-software/1400/900',
+    image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1600&auto=format&fit=crop',
   },
   {
     key: 'biologia',
     title: 'Biología',
     tag: 'Ciencias',
     tone: '#059669',
-    image: 'https://picsum.photos/seed/tutorias-biologia/1400/900',
+    image: 'https://png.pngtree.com/thumb_back/fw800/background/20230302/pngtree-dna-education-biology-image_1739954.jpg',
   },
   {
     key: 'algebra',
     title: 'Álgebra',
     tag: 'Lógica',
     tone: '#7C3AED',
-    image: 'https://picsum.photos/seed/tutorias-algebra/1400/900',
+    image: 'https://t4.ftcdn.net/jpg/05/08/10/35/360_F_508103535_BvW4uJs6MKlAVrRPSwGJ1Y36t5pw0EvD.jpg',
   },
   {
     key: 'ingles',
     title: 'Inglés',
     tag: 'Idiomas',
     tone: '#F97316',
-    image: 'https://picsum.photos/seed/tutorias-ingles/1400/900',
+    image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop',
   },
 ];
+
+export const normalizeRole = (role) => String(role || '').trim().toLowerCase();
+
+export const getProfileRole = (profile) =>
+  profile?.role || profile?.tipo || profile?.userType || profile?.accountType || profile?.rol || '';
 
 const navItems = [
   { label: 'Inicio', route: '/', icon: 'dashboard' },
   { label: 'Perfil', route: '/profile', icon: 'person' },
   { label: 'Chats', route: '/chats', icon: 'forum' },
   { label: 'Agenda', route: '/agenda', icon: 'calendar-month' },
-  { label: 'Explorar', route: '/explore', icon: 'travel-explore' },
 ];
 
 export function useWebSession() {
@@ -121,7 +275,7 @@ export function useWebSession() {
           ready: true,
           user: firebaseUser,
           profile,
-          role: profile?.role || '',
+          role: getProfileRole(profile),
         });
       }
     });
@@ -163,11 +317,20 @@ export function AnimatedScreen({ children, delay = 0, style }) {
   );
 }
 
-export function WebShell({ title, subtitle, active, children, actions, compact = false }) {
+export function WebShell(props) {
+  return (
+    <WebThemeProvider>
+      <WebShellContent {...props} />
+    </WebThemeProvider>
+  );
+}
+
+function WebShellContent({ title, subtitle, active, children, actions, compact = false }) {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const session = useWebSession();
+  const { colors } = useWebTheme();
   const isNarrow = width < 920;
   const content = (
     <View style={[styles.shellBody, isNarrow && styles.shellBodyNarrow]}>
@@ -179,6 +342,7 @@ export function WebShell({ title, subtitle, active, children, actions, compact =
         </View>
         <View style={styles.headerActions}>
           {actions}
+          <ThemeToggle />
           {session.ready && session.user ? (
             <Pressable
               style={styles.userChip}
@@ -235,7 +399,7 @@ export function WebShell({ title, subtitle, active, children, actions, compact =
                   <MaterialIcons
                     name={item.icon}
                     size={20}
-                    color={isActive ? '#FFFFFF' : webTokens.color.muted}
+                    color={isActive ? webTokens.color.onBrand : webTokens.color.muted}
                   />
                   <Text style={[styles.navText, isActive && styles.navTextActive]}>{item.label}</Text>
                 </Pressable>
@@ -244,7 +408,7 @@ export function WebShell({ title, subtitle, active, children, actions, compact =
           </View>
 
           <LinearGradient
-            colors={['#E0F2FE', '#FFFFFF']}
+            colors={colors.sidebarGradient}
             style={styles.sidebarCard}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -276,13 +440,22 @@ export function WebShell({ title, subtitle, active, children, actions, compact =
   );
 }
 
-export function AuthShell({ title, subtitle, children, sideTitle, sideText }) {
+export function AuthShell(props) {
+  return (
+    <WebThemeProvider>
+      <AuthShellContent {...props} />
+    </WebThemeProvider>
+  );
+}
+
+function AuthShellContent({ title, subtitle, children, sideTitle, sideText }) {
   const router = useRouter();
+  const { colors } = useWebTheme();
   return (
     <View style={styles.authPage}>
       <AnimatedScreen style={styles.authVisual}>
         <LinearGradient
-          colors={[webTokens.color.brand, webTokens.color.brand2, webTokens.color.brand3]}
+          colors={colors.authGradient}
           style={styles.authGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -300,15 +473,33 @@ export function AuthShell({ title, subtitle, children, sideTitle, sideText }) {
         </LinearGradient>
       </AnimatedScreen>
       <AnimatedScreen delay={120} style={styles.authCard}>
-        <Pressable style={styles.authBack} onPress={() => router.back()} accessibilityRole="button">
-          <MaterialIcons name="arrow-back" size={18} color={webTokens.color.brand} />
-          <Text style={styles.authBackText}>Volver</Text>
-        </Pressable>
+        <View style={styles.authTop}>
+          <Pressable style={styles.authBack} onPress={() => router.back()} accessibilityRole="button">
+            <MaterialIcons name="arrow-back" size={18} color={webTokens.color.brand} />
+            <Text style={styles.authBackText}>Volver</Text>
+          </Pressable>
+          <ThemeToggle compact />
+        </View>
         <Text style={styles.authTitle}>{title}</Text>
         {subtitle ? <Text style={styles.authSubtitle}>{subtitle}</Text> : null}
         {children}
       </AnimatedScreen>
     </View>
+  );
+}
+
+export function ThemeToggle({ compact = false }) {
+  const { isDark, toggleTheme } = useWebTheme();
+  return (
+    <Pressable
+      style={({ hovered }) => [styles.themeToggle, compact && styles.themeToggleCompact, hovered && styles.themeToggleHover]}
+      onPress={toggleTheme}
+      accessibilityRole="button"
+      accessibilityLabel={isDark ? 'Activar modo claro' : 'Activar modo oscuro'}
+    >
+      <MaterialIcons name={isDark ? 'light-mode' : 'dark-mode'} size={compact ? 18 : 20} color={webTokens.color.brand} />
+      {!compact ? <Text style={styles.themeToggleText}>{isDark ? 'Claro' : 'Oscuro'}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -346,14 +537,14 @@ export function WebButton({ label, icon, onPress, variant = 'primary', disabled,
       accessibilityRole="button"
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#FFFFFF' : webTokens.color.brand} />
+        <ActivityIndicator color={variant === 'primary' ? webTokens.color.onBrand : webTokens.color.brand} />
       ) : (
         <>
           {icon ? (
             <MaterialIcons
               name={icon}
               size={small ? 16 : 19}
-              color={variant === 'primary' ? '#FFFFFF' : webTokens.color.brand}
+              color={variant === 'primary' ? webTokens.color.onBrand : webTokens.color.brand}
             />
           ) : null}
           <Text style={[styles.buttonText, variant !== 'primary' && styles.buttonTextAlt]}>{label}</Text>
@@ -381,13 +572,14 @@ export function WebInput({ label, error, style, right, ...props }) {
 }
 
 export function WebBadge({ children, tone = 'blue', icon }) {
+  const { isDark } = useWebTheme();
   const palette = {
-    blue: ['#DBEAFE', '#1D4ED8'],
-    green: ['#D1FAE5', '#047857'],
-    amber: ['#FEF3C7', '#B45309'],
-    red: ['#FEE2E2', '#B91C1C'],
-    gray: ['#EEF2F7', '#475467'],
-  }[tone] || ['#DBEAFE', '#1D4ED8'];
+    blue: isDark ? ['rgba(124,167,255,.18)', '#AFC8FF'] : ['#DBEAFE', '#1D4ED8'],
+    green: isDark ? ['rgba(52,211,153,.16)', '#86EFAC'] : ['#D1FAE5', '#047857'],
+    amber: isDark ? ['rgba(251,191,36,.16)', '#FDE68A'] : ['#FEF3C7', '#B45309'],
+    red: isDark ? ['rgba(248,113,113,.16)', '#FCA5A5'] : ['#FEE2E2', '#B91C1C'],
+    gray: isDark ? ['rgba(167,179,200,.14)', '#CBD5E1'] : ['#EEF2F7', '#475467'],
+  }[tone] || (isDark ? ['rgba(124,167,255,.18)', '#AFC8FF'] : ['#DBEAFE', '#1D4ED8']);
   return (
     <View style={[styles.badge, { backgroundColor: palette[0] }]}>
       {icon ? <MaterialIcons name={icon} size={15} color={palette[1]} /> : null}
@@ -397,10 +589,12 @@ export function WebBadge({ children, tone = 'blue', icon }) {
 }
 
 export function WebStat({ label, value, icon, tone = webTokens.color.brand }) {
+  const { colors } = useWebTheme();
+  const softTone = typeof tone === 'string' && tone.startsWith('var(') ? colors.surfaceAlt : `${tone}18`;
   return (
     <View style={styles.stat}>
       {icon ? (
-        <View style={[styles.statIcon, { backgroundColor: `${tone}18` }]}>
+        <View style={[styles.statIcon, { backgroundColor: softTone }]}>
           <MaterialIcons name={icon} size={20} color={tone} />
         </View>
       ) : null}
@@ -433,7 +627,16 @@ export function LoadingState({ label = 'Cargando...' }) {
 }
 
 export function SubjectImage({ uri, style }) {
-  return <Image source={{ uri }} style={[styles.subjectImage, style]} resizeMode="cover" />;
+  const [failed, setFailed] = useState(false);
+  const { colors } = useWebTheme();
+  if (failed || !uri) {
+    return (
+      <LinearGradient colors={[colors.surfaceAlt, colors.chip]} style={[styles.subjectImage, styles.subjectImageFallback, style]}>
+        <MaterialIcons name="auto-stories" size={34} color={webTokens.color.brand} />
+      </LinearGradient>
+    );
+  }
+  return <Image source={{ uri }} style={[styles.subjectImage, style]} resizeMode="cover" onError={() => setFailed(true)} />;
 }
 
 export const decodeParam = (value) => decodeURIComponent(Array.isArray(value) ? value[0] || '' : value || '');
@@ -460,8 +663,10 @@ export const formatSlot = (slot) => {
   return `${label} · ${pad(slot.hourStart)}:00 - ${pad(slot.hourEnd)}:00`;
 };
 
-export const roleIsTeacher = (role) => String(role || '').toLowerCase() === 'teacher';
-export const roleIsStudent = (role) => String(role || '').toLowerCase() === 'student';
+export const roleIsTeacher = (role) =>
+  ['teacher', 'docente', 'profesor', 'profesora'].includes(normalizeRole(role));
+export const roleIsStudent = (role) =>
+  ['student', 'estudiante', 'alumno', 'alumna'].includes(normalizeRole(role));
 
 export async function signOutWeb(router) {
   await signOut(auth);
@@ -480,7 +685,7 @@ const styles = StyleSheet.create({
     padding: 22,
     borderRightWidth: 1,
     borderRightColor: webTokens.color.line,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.surface,
     gap: 24,
   },
   brand: {
@@ -496,7 +701,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   brandMarkText: {
-    color: '#FFFFFF',
+    color: webTokens.color.onBrand,
     fontSize: 24,
     fontWeight: '900',
   },
@@ -530,14 +735,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   navTextActive: {
-    color: '#FFFFFF',
+    color: webTokens.color.onBrand,
   },
   sidebarCard: {
     marginTop: 'auto',
     padding: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: webTokens.color.line,
   },
   sidebarCardTitle: {
     color: webTokens.color.ink,
@@ -602,7 +807,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.elevated,
     borderWidth: 1,
     borderColor: webTokens.color.line,
     borderRadius: 999,
@@ -618,7 +823,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     padding: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.surface,
     borderBottomWidth: 1,
     borderBottomColor: webTokens.color.line,
     overflow: 'scroll',
@@ -630,7 +835,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: '#EEF4FF',
+    backgroundColor: webTokens.color.chip,
   },
   mobileNavText: {
     color: webTokens.color.brand,
@@ -680,13 +885,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
   },
   authVisualTitle: {
-    color: '#FFFFFF',
+    color: webTokens.color.onBrand,
     fontSize: 52,
     lineHeight: 58,
     fontWeight: '900',
   },
   authVisualText: {
-    color: '#EAF2FF',
+    color: webTokens.color.heroText,
     fontSize: 18,
     lineHeight: 28,
     maxWidth: 580,
@@ -701,7 +906,7 @@ const styles = StyleSheet.create({
     flex: 0.9,
     maxWidth: 520,
     minWidth: 340,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.elevated,
     borderRadius: 28,
     padding: 34,
     alignSelf: 'center',
@@ -714,6 +919,13 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
     alignSelf: 'flex-start',
+    marginBottom: 20,
+  },
+  authTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
   },
   authBackText: {
@@ -763,16 +975,16 @@ const styles = StyleSheet.create({
     borderColor: webTokens.color.brand,
   },
   button_secondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.elevated,
     borderColor: webTokens.color.line,
   },
   button_ghost: {
-    backgroundColor: '#EEF4FF',
-    borderColor: '#D8E7FF',
+    backgroundColor: webTokens.color.chip,
+    borderColor: webTokens.color.line,
   },
   button_danger: {
     backgroundColor: webTokens.color.badSoft,
-    borderColor: '#FECACA',
+    borderColor: webTokens.color.bad,
   },
   buttonHover: {
     opacity: 0.92,
@@ -782,7 +994,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: webTokens.color.onBrand,
     fontWeight: '900',
   },
   buttonTextAlt: {
@@ -801,7 +1013,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: webTokens.color.line,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.input,
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
@@ -836,11 +1048,11 @@ const styles = StyleSheet.create({
   },
   stat: {
     minWidth: 120,
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: webTokens.color.elevated,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
+    borderColor: webTokens.color.line,
   },
   statIcon: {
     width: 36,
@@ -868,7 +1080,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: '#EEF4FF',
+    backgroundColor: webTokens.color.chip,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
@@ -899,5 +1111,34 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 190,
     backgroundColor: webTokens.color.surfaceAlt,
+  },
+  subjectImageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeToggle: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: webTokens.color.line,
+    backgroundColor: webTokens.color.elevated,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  themeToggleCompact: {
+    width: 40,
+    paddingHorizontal: 0,
+  },
+  themeToggleHover: {
+    transform: [{ translateY: -1 }],
+    ...webTokens.shadow.soft,
+  },
+  themeToggleText: {
+    color: webTokens.color.ink,
+    fontWeight: '900',
   },
 });

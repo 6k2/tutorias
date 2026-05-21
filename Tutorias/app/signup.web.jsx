@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.elevated,
   },
   roleSelected: {
     backgroundColor: webTokens.color.brand,

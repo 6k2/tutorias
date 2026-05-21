@@ -15,6 +15,7 @@ import {
   WebInput,
   WebShell,
   formatSlot,
+  getProfileRole,
   roleIsStudent,
   roleIsTeacher,
   signOutWeb,
@@ -63,7 +64,7 @@ export default function ProfileWebScreen() {
       setSpecialties(Array.isArray(data.specialties) ? data.specialties : []);
       setUsername(data.username || '');
       setEmail(data.email || user.email || '');
-      setRole(data.role || '');
+      setRole(getProfileRole(data));
       setLoading(false);
     }, () => setLoading(false));
     return unsubscribe;
@@ -174,7 +175,7 @@ export default function ProfileWebScreen() {
             <Text style={styles.blockTitle}>Accesos rápidos</Text>
             <WebButton label="Agenda" icon="calendar-month" variant="secondary" onPress={() => router.push('/agenda')} />
             <WebButton label="Chats" icon="forum" variant="secondary" onPress={() => router.push('/chats')} />
-            <WebButton label="Explorar materias" icon="travel-explore" variant="secondary" onPress={() => router.push('/explore')} />
+            <WebButton label="Ver materias" icon="dashboard" variant="secondary" onPress={() => router.push('/')} />
           </WebCard>
         </View>
       </View>
@@ -278,7 +279,7 @@ const styles = StyleSheet.create({
   profileCard: { gap: 16 },
   profileTop: { flexDirection: 'row', alignItems: 'center', gap: 18, flexWrap: 'wrap' },
   avatar: { width: 112, height: 112, borderRadius: 32, backgroundColor: webTokens.color.surfaceAlt },
-  avatarFallback: { width: 112, height: 112, borderRadius: 32, backgroundColor: '#EEF4FF', alignItems: 'center', justifyContent: 'center' },
+  avatarFallback: { width: 112, height: 112, borderRadius: 32, backgroundColor: webTokens.color.chip, alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { color: webTokens.color.brand, fontSize: 42, fontWeight: '900' },
   name: { color: webTokens.color.ink, fontSize: 30, fontWeight: '900' },
   email: { color: webTokens.color.muted, marginTop: 4, fontWeight: '700' },
@@ -287,20 +288,20 @@ const styles = StyleSheet.create({
   label: { color: webTokens.color.ink, fontWeight: '900', marginTop: 6 },
   textArea: { minHeight: 118, borderRadius: 16, borderWidth: 1, borderColor: webTokens.color.line, padding: 14, color: webTokens.color.ink, outlineStyle: 'none' },
   specialties: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  specialty: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: webTokens.color.line, backgroundColor: '#FFFFFF' },
+  specialty: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: webTokens.color.line, backgroundColor: webTokens.color.elevated },
   specialtyActive: { backgroundColor: webTokens.color.brand, borderColor: webTokens.color.brand },
   specialtyText: { color: webTokens.color.muted, fontWeight: '900' },
-  specialtyTextActive: { color: '#FFFFFF' },
+  specialtyTextActive: { color: webTokens.color.onBrand },
   save: { alignSelf: 'flex-end', marginTop: 8 },
   side: { gap: 18 },
   quickCard: { gap: 12 },
   blockTitle: { color: webTokens.color.ink, fontSize: 22, fontWeight: '900' },
   muted: { color: webTokens.color.muted, lineHeight: 21 },
   materialGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14, marginTop: 14 },
-  materialCard: { gap: 10, borderRadius: 18, padding: 16, backgroundColor: '#F8FAFF', borderWidth: 1, borderColor: webTokens.color.line },
+  materialCard: { gap: 10, borderRadius: 18, padding: 16, backgroundColor: webTokens.color.surfaceAlt, borderWidth: 1, borderColor: webTokens.color.line },
   cardTitle: { color: webTokens.color.ink, fontWeight: '900' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,.45)', justifyContent: 'center', padding: 24 },
-  modalCard: { maxWidth: 780, width: '100%', alignSelf: 'center', backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, gap: 14, ...webTokens.shadow.lift },
+  modalBackdrop: { flex: 1, backgroundColor: webTokens.color.overlay, justifyContent: 'center', padding: 24 },
+  modalCard: { maxWidth: 780, width: '100%', alignSelf: 'center', backgroundColor: webTokens.color.elevated, borderRadius: 24, padding: 22, gap: 14, ...webTokens.shadow.lift },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 14 },
   materialRows: { gap: 10 },
   materialRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: webTokens.color.line, borderRadius: 16, padding: 12, flexWrap: 'wrap' },

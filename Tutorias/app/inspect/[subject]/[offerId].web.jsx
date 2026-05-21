@@ -183,18 +183,18 @@ export default function OfferDetailWebScreen() {
   };
 
   if (!ready || loading) {
-    return <WebShell title="Detalle de tutoría" active="/explore"><LoadingState label="Preparando detalle..." /></WebShell>;
+    return <WebShell title="Detalle de tutoría" active="/"><LoadingState label="Preparando detalle..." /></WebShell>;
   }
 
   if (!offer) {
-    return <WebShell title="Detalle de tutoría" active="/explore"><EmptyState title="Oferta no encontrada" text="No pudimos cargar esta tutoría." /></WebShell>;
+    return <WebShell title="Detalle de tutoría" active="/"><EmptyState title="Oferta no encontrada" text="No pudimos cargar esta tutoría." /></WebShell>;
   }
 
   return (
     <WebShell
       title={subjectName}
       subtitle={`Con ${teacherName}. Revisa cupos, precio y selecciona un horario antes de reservar.`}
-      active="/explore"
+      active="/"
       actions={<WebButton label="Volver" icon="arrow-back" variant="secondary" onPress={() => router.back()} />}
     >
       <View style={styles.layout}>
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   metric: {
-    backgroundColor: '#F8FAFF',
+    backgroundColor: webTokens.color.surfaceAlt,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: webTokens.color.line,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: webTokens.color.elevated,
   },
   slotSelected: {
     backgroundColor: webTokens.color.brand,
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     borderRadius: 16,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: webTokens.color.surfaceAlt,
     borderWidth: 1,
     borderColor: webTokens.color.line,
   },

@@ -7,6 +7,10 @@ import {
 } from '../../../constants/firestore';
 import { ensureOfflineReady } from '../../../tools/offline';
 
+const teacherRoles = new Set(['teacher', 'docente', 'profesor', 'profesora']);
+
+const isTeacherRole = (role) => teacherRoles.has(String(role || '').trim().toLowerCase());
+
 export function useConfirmedEnrollments(uid, role, options = {}) {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(Boolean(uid));
@@ -30,8 +34,7 @@ export function useConfirmedEnrollments(uid, role, options = {}) {
       .catch(() => {})
       .finally(() => {
         if (cancelled) return;
-        const normalizedRole = String(role || 'student').toLowerCase();
-        const field = normalizedRole === 'teacher' ? 'teacherId' : 'studentId';
+        const field = isTeacherRole(role) ? 'teacherId' : 'studentId';
         const reservationsQuery = query(
           collection(db, RESERVATIONS_COLLECTION),
           where(field, '==', uid),

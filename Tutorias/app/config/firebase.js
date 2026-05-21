@@ -50,8 +50,6 @@ let _db;
 if (Platform.OS === "web") {
   _db = getFirestore(app);
 } else {
-<<<<<<< Updated upstream
-=======
   const nativeFirestoreSettings = {
     experimentalAutoDetectLongPolling: true,
     useFetchStreams: false,
@@ -62,25 +60,34 @@ if (Platform.OS === "web") {
     ...options,
   });
 
->>>>>>> Stashed changes
   try {
-    _db = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager(),
-      }),
-    });
+    _db = initializeFirestore(
+      app,
+      withNativeNetworkFixes({
+        localCache: persistentLocalCache({
+          tabManager: persistentSingleTabManager(),
+        }),
+      })
+    );
   } catch (error) {
     console.warn(
       "Firestore persistence unavailable, falling back to memory cache",
       error
     );
     try {
-      _db = initializeFirestore(app, {
-        localCache: memoryLocalCache(),
-      });
+      _db = initializeFirestore(
+        app,
+        withNativeNetworkFixes({
+          localCache: memoryLocalCache(),
+        })
+      );
     } catch (_fallbackError) {
-      // If Firestore was already initialised (Fast Refresh), grab the existing instance.
-      _db = getFirestore(app);
+      try {
+        _db = initializeFirestore(app, withNativeNetworkFixes());
+      } catch (_finalError) {
+        // If Firestore was already initialised (Fast Refresh), grab the existing instance.
+        _db = getFirestore(app);
+      }
     }
   }
 }

@@ -14,6 +14,7 @@ import {
   WebInput,
   WebShell,
   decodeParam,
+  getProfileRole,
   roleIsTeacher,
   webTokens,
 } from '../../components/web/WebUI';
@@ -49,7 +50,7 @@ export default function MatriculaWebScreen() {
       }
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
-        if (alive) setRole(snap.data()?.role || '');
+        if (alive) setRole(getProfileRole(snap.data()));
       } finally {
         if (alive) setRoleLoaded(true);
       }
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
   imageRow: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
   preview: { width: 130, height: 92, borderRadius: 16, backgroundColor: webTokens.color.surfaceAlt },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
-  metric: { backgroundColor: '#F8FAFF', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: webTokens.color.line },
+  metric: { backgroundColor: webTokens.color.surfaceAlt, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: webTokens.color.line },
   metricValue: { color: webTokens.color.ink, fontSize: 24, fontWeight: '900' },
   metricLabel: { color: webTokens.color.muted, fontWeight: '800', marginTop: 3 },
   muted: { color: webTokens.color.muted, marginTop: 6 },
@@ -248,9 +249,9 @@ const styles = StyleSheet.create({
   dayHeader: { display: 'grid', gridTemplateColumns: 'repeat(6, minmax(112px, 1fr))', gap: 8 },
   dayText: { color: webTokens.color.ink, fontWeight: '900', textAlign: 'center' },
   hourRow: { display: 'grid', gridTemplateColumns: 'repeat(6, minmax(112px, 1fr))', gap: 8 },
-  slot: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: webTokens.color.line, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', padding: 8 },
+  slot: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: webTokens.color.line, alignItems: 'center', justifyContent: 'center', backgroundColor: webTokens.color.elevated, padding: 8 },
   slotActive: { backgroundColor: webTokens.color.brand, borderColor: webTokens.color.brand, ...webTokens.shadow.lift },
   slotText: { color: webTokens.color.muted, fontWeight: '800', textAlign: 'center' },
-  slotTextActive: { color: '#FFFFFF' },
+  slotTextActive: { color: webTokens.color.onBrand },
   save: { marginTop: 20, alignSelf: 'flex-end' },
 });

@@ -3,6 +3,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../../../app/config/firebase';
 
+const getProfileRole = (data = {}) =>
+  data.role || data.tipo || data.userType || data.accountType || data.rol || 'student';
+
 // Tiny hook that exposes the current Firebase user info.
 // We keep it simple because Expo apps often reuse this across screens.
 export function useAuthUser() {
@@ -55,7 +58,7 @@ export function useAuthUser() {
       (snapshot) => {
         const data = snapshot.data() || {};
         setProfile({
-          role: data.role || 'student',
+          role: getProfileRole(data),
           matricula: data.matricula || null,
           subjects: Array.isArray(data.subjects) ? data.subjects : [],
         });

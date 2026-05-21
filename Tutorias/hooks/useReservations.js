@@ -103,6 +103,10 @@ const STATUS_LABELS = {
   [RESERVATION_STATUS.CANCELLED]: 'Cancelada',
 };
 
+const TEACHER_ROLES = new Set(['teacher', 'docente', 'profesor', 'profesora']);
+
+const isTeacherRole = (role) => TEACHER_ROLES.has(String(role || '').trim().toLowerCase());
+
 const withLabels = (rows = []) =>
   rows.map((item) => ({
     ...item,
@@ -148,7 +152,7 @@ export const useReservations = (role, uid, options = {}) => {
       }
     });
 
-    const field = String(role).toLowerCase() === 'teacher' ? 'teacherId' : 'studentId';
+    const field = isTeacherRole(role) ? 'teacherId' : 'studentId';
     const q = query(collection(db, RESERVATIONS_COLLECTION), where(field, '==', uid));
 
     const unsubscribeSnapshot = onSnapshot(

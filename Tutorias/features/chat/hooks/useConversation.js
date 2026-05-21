@@ -4,7 +4,6 @@ import {
   collectionGroup,
   doc,
   getDocs,
-  limit,
   onSnapshot,
   query,
   where,
@@ -12,28 +11,11 @@ import {
 import { db } from '../../../app/config/firebase';
 import { ensureConversationRecord } from '../api/conversations';
 
-const REQUIRED_FIELDS = {
-  lastMessage: null,
-  lastMessageAt: null,
-  lastMessageMeta: null,
-  unreadBy: [],
-};
-
 const buildConversationKey = (uidA, uidB) => {
   if (!uidA || !uidB) return null;
   const sorted = [uidA, uidB].sort();
   return `${sorted[0]}_${sorted[1]}`;
 };
-
-const sanitizeProfile = (user = {}, conversationId, meta) => ({
-  uid: user?.uid,
-  displayName: user?.displayName || 'Sin nombre',
-  photoURL: user?.photoURL || null,
-  role: user?.role || null,
-  conversationId,
-  subjectKey: meta?.subjectKey || null,
-  subjectName: meta?.subjectName || null,
-});
 
 const fetchParticipants = async (conversationRef) => {
   const participantsCollection = collection(conversationRef, 'participants');
@@ -56,16 +38,28 @@ export function useConversation(myUser, otherUser, options = {}) {
   const conversationKey = buildConversationKey(myUser?.uid, otherUser?.uid);
   const enrollmentMeta = conversationKey ? metaByKey?.get?.(conversationKey) : null;
   const isAllowed = !allowedKeys || !conversationKey || allowedKeys.has(conversationKey);
+  const myConversationUser = useMemo(() => (myUser?.uid ? {
+    uid: myUser.uid,
+    displayName: myUser.displayName,
+    photoURL: myUser.photoURL,
+    role: myUser.role,
+  } : null), [myUser?.uid, myUser?.displayName, myUser?.photoURL, myUser?.role]);
+  const otherConversationUser = useMemo(() => (otherUser?.uid ? {
+    uid: otherUser.uid,
+    displayName: otherUser.displayName,
+    photoURL: otherUser.photoURL,
+    role: otherUser.role,
+  } : null), [otherUser?.uid, otherUser?.displayName, otherUser?.photoURL, otherUser?.role]);
 
   useEffect(() => {
-    if (!myUser?.uid || !otherUser?.uid || !conversationKey) {
+    if (!myConversationUser?.uid || !otherConversationUser?.uid || !conversationKey) {
       setConversation(null);
       setLoading(false);
       setError(null);
       return () => {};
     }
 
-    if (allowedKeys && allowedKeys.size && !isAllowed) {
+    if (allowedKeys && !isAllowed) {
       setConversation(null);
       setLoading(false);
       setError(new Error('not-authorized'));
@@ -80,8 +74,8 @@ export function useConversation(myUser, otherUser, options = {}) {
     const bootstrap = async () => {
       try {
         const conversationRef = await ensureConversationRecord({
-          myUser,
-          otherUser,
+          myUser: myConversationUser,
+          otherUser: otherConversationUser,
           meta: enrollmentMeta,
         });
         if (!conversationRef || !active) {
@@ -121,12 +115,8 @@ export function useConversation(myUser, otherUser, options = {}) {
       unsubscribe();
     };
   }, [
-    myUser?.uid,
-    myUser?.displayName,
-    myUser?.photoURL,
-    otherUser?.uid,
-    otherUser?.displayName,
-    otherUser?.photoURL,
+    myConversationUser,
+    otherConversationUser,
     conversationKey,
     allowedKeys,
     isAllowed,
@@ -142,7 +132,7 @@ export function useConversation(myUser, otherUser, options = {}) {
 }
 
 export function useUserConversations(uid, options = {}) {
-  const { allowedKeys = null, metaByKey = null } = options;
+  const { allowedKeys = null, metaByKey = null, disabled = false } = options;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fromCache, setFromCache] = useState(false);
@@ -152,7 +142,7 @@ export function useUserConversations(uid, options = {}) {
   const isConversationAllowed = useCallback(
     (data) => {
       if (!data?.conversationKey) return false;
-      if (allowedKeys && allowedKeys.size && !allowedKeys.has(data.conversationKey)) {
+      if (allowedKeys && !allowedKeys.has(data.conversationKey)) {
         return false;
       }
       return true;
@@ -176,7 +166,7 @@ export function useUserConversations(uid, options = {}) {
   }, []);
 
   useEffect(() => {
-    if (!uid) {
+    if (!uid || disabled) {
       setItems([]);
       setLoading(false);
       setFromCache(false);
@@ -187,6 +177,8 @@ export function useUserConversations(uid, options = {}) {
     }
 
     setLoading(true);
+    const watchers = conversationWatchers.current;
+    const keysById = conversationKeysById.current;
     const participantsQuery = query(
       collectionGroup(db, 'participants'),
       where('uid', '==', uid)
@@ -290,14 +282,14 @@ export function useUserConversations(uid, options = {}) {
 
     return () => {
       unsubscribeParticipants();
-      conversationWatchers.current.forEach((unsubscribe) => unsubscribe());
-      conversationWatchers.current.clear();
-      conversationKeysById.current.clear();
+      watchers.forEach((unsubscribe) => unsubscribe());
+      watchers.clear();
+      keysById.clear();
     };
-  }, [uid, isConversationAllowed, enrollmentForKey, dropConversation]);
+  }, [uid, disabled, isConversationAllowed, enrollmentForKey, dropConversation]);
 
   useEffect(() => {
-    if (!allowedKeys || !allowedKeys.size) {
+    if (!allowedKeys) {
       return;
     }
     conversationKeysById.current.forEach((key, conversationId) => {

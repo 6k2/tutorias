@@ -57,6 +57,221 @@ service cloud.firestore {
       return get(materialPath(materialId)).data;
     }
 
+    function offerPath(offerId) {
+      return /databases/$(database)/documents/offers/$(offerId);
+    }
+
+    function offerExists(offerId) {
+      return offerId is string
+        && offerId.size() > 0
+        && exists(offerPath(offerId));
+    }
+
+    function offerData(offerId) {
+      return get(offerPath(offerId)).data;
+    }
+
+    function isOwnUserDoc(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function immutableConversationFields() {
+      return request.resource.data.conversationKey == resource.data.conversationKey
+        && request.resource.data.participantUids == resource.data.participantUids
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.subjectKey == resource.data.subjectKey
+        && request.resource.data.subjectName == resource.data.subjectName
+        && request.resource.data.reservationId == resource.data.reservationId;
+    }
+
+    function conversationFieldsOnly() {
+      return request.resource.data.keys().hasOnly([
+        'conversationKey',
+        'participantUids',
+        'createdAt',
+        'updatedAt',
+        'lastMessage',
+        'lastMessageAt',
+        'unreadBy',
+        'lastMessageMeta',
+        'subjectKey',
+        'subjectName',
+        'reservationId'
+      ]);
+    }
+
+    function validMessagePreviewUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lastMessage',
+          'lastMessageAt',
+          'updatedAt',
+          'unreadBy',
+          'lastMessageMeta'
+        ])
+        && request.resource.data.lastMessageAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validReadReceiptUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadBy'])
+        && request.auth.uid in resource.data.unreadBy
+        && !(request.auth.uid in request.resource.data.unreadBy);
+    }
+
+    function validOfferCreate() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'username',
+          'subject',
+          'subjectName',
+          'maxStudents',
+          'price',
+          'images',
+          'schedule',
+          'enrolledCount',
+          'pendingCount',
+          'createdAt',
+          'updatedAt'
+        ]);
+    }
+
+    function validOfferOwnerUpdate() {
+      return resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validStudentPendingIncrement() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingCount', 'updatedAt'])
+        && request.resource.data.pendingCount == currentPendingCount() + 1
+        && request.resource.data.updatedAt == request.time
+        && resource.data.uid != request.auth.uid;
+    }
+
+    function currentPendingCount() {
+      return resource.data.keys().hasAny(['pendingCount'])
+        ? resource.data.pendingCount
+        : 0;
+    }
+
+    function currentEnrolledCount() {
+      return resource.data.keys().hasAny(['enrolledCount'])
+        ? resource.data.enrolledCount
+        : 0;
+    }
+
+    function validOfferReservationStatusCounters() {
+      return resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'pendingCount',
+          'enrolledCount',
+          'updatedAt'
+        ])
+        && request.resource.data.pendingCount >= 0
+        && request.resource.data.enrolledCount >= 0
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            request.resource.data.pendingCount == currentPendingCount() - 1
+            && request.resource.data.enrolledCount == currentEnrolledCount() + 1
+          )
+          || (
+            request.resource.data.pendingCount == currentPendingCount()
+            && request.resource.data.enrolledCount == currentEnrolledCount()
+          )
+          || (
+            request.resource.data.pendingCount == currentPendingCount()
+            && request.resource.data.enrolledCount == currentEnrolledCount() - 1
+          )
+          || (
+            request.resource.data.pendingCount == currentPendingCount() - 1
+            && request.resource.data.enrolledCount == currentEnrolledCount()
+          )
+        );
+    }
+
+    function validReservationCreate() {
+      return request.resource.data.studentId == request.auth.uid
+        && offerExists(request.resource.data.offerId)
+        && request.resource.data.teacherId == offerData(request.resource.data.offerId).uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.keys().hasOnly([
+          'offerId',
+          'subjectKey',
+          'subjectName',
+          'teacherId',
+          'studentId',
+          'status',
+          'slot',
+          'price',
+          'studentDisplayName',
+          'teacherDisplayName',
+          'createdAt',
+          'updatedAt'
+        ]);
+    }
+
+    function authOwnsReservationDoc() {
+      return isSignedIn()
+        && (resource.data.teacherId == request.auth.uid || resource.data.studentId == request.auth.uid);
+    }
+
+    function validReservationStatusUpdate() {
+      return resource.data.teacherId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.status in ['pending', 'confirmed', 'rejected', 'cancelled'];
+    }
+
+    match /users/{userId} {
+      allow get, list: if isSignedIn();
+      allow create: if isOwnUserDoc(userId)
+        && request.resource.data.uid == userId;
+      allow update: if isOwnUserDoc(userId)
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if false;
+
+      match /offers/{subjectId} {
+        allow read, write: if isOwnUserDoc(userId);
+      }
+
+      match /materialViews/{materialId} {
+        allow read: if isOwnUserDoc(userId);
+        allow write: if isOwnUserDoc(userId)
+          && request.resource.data.keys().hasOnly([
+            'materialId',
+            'reservationId',
+            'lastViewedAt'
+          ]);
+      }
+    }
+
+    match /offers/{offerId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && validOfferCreate();
+      allow update: if isSignedIn()
+        && (
+          validOfferOwnerUpdate()
+          || validStudentPendingIncrement()
+          || validOfferReservationStatusCounters()
+        );
+      allow delete: if false;
+    }
+
+    match /reservations/{reservationId} {
+      allow read: if authOwnsReservationDoc()
+        || (isSignedIn() && resource.data.status == 'confirmed');
+      allow create: if isSignedIn() && validReservationCreate();
+      allow update: if isSignedIn() && validReservationStatusUpdate();
+      allow delete: if false;
+    }
+
     match /conversations/{conversationId} {
       allow create: if isSignedIn()
         && request.resource.data.participantUids.size() == 2
@@ -71,27 +286,12 @@ service cloud.firestore {
       allow read: if authInConversation(conversationId);
 
       allow update: if authInConversation(conversationId)
-        && request.resource.data.conversationKey == resource.data.conversationKey
-        && request.resource.data.participantUids == resource.data.participantUids
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.subjectKey == resource.data.subjectKey
-        && request.resource.data.subjectName == resource.data.subjectName
-        && request.resource.data.reservationId == resource.data.reservationId
-        && request.resource.data.keys().hasOnly([
-          'conversationKey',
-          'participantUids',
-          'createdAt',
-          'updatedAt',
-          'lastMessage',
-          'lastMessageAt',
-          'unreadBy',
-          'lastMessageMeta',
-          'subjectKey',
-          'subjectName',
-          'reservationId'
-        ])
-        && request.resource.data.lastMessageAt == request.time
-        && request.resource.data.updatedAt == request.time;
+        && immutableConversationFields()
+        && conversationFieldsOnly()
+        && (
+          validMessagePreviewUpdate()
+          || validReadReceiptUpdate()
+        );
 
       allow delete: if false;
     }
@@ -137,8 +337,13 @@ service cloud.firestore {
         ]);
       }
 
-      allow get, list: if materialExists(materialId)
-        && authInReservation(materialData(materialId).reservationId);
+      allow get, list: if isSignedIn()
+        && materialExists(materialId)
+        && (
+          resource.data.teacherId == request.auth.uid
+          || resource.data.studentId == request.auth.uid
+          || authInReservation(materialData(materialId).reservationId)
+        );
 
       allow create: if isSignedIn()
         && reservationExists(requestReservationId())

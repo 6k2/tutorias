@@ -7,9 +7,9 @@ export default function NotFoundWebScreen() {
   return (
     <WebShell title="Ruta no encontrada" subtitle="Esta página no existe en la experiencia web." active="">
       <EmptyState
-        icon="travel-explore"
+        icon="home"
         title="No encontramos esta ruta"
-        text="Vuelve al inicio para seguir explorando materias, reservas y chats."
+        text="Vuelve al inicio para ver materias, reservas y chats."
         action={<WebButton label="Ir al inicio" icon="home" onPress={() => router.replace('/')} />}
       />
     </WebShell>
