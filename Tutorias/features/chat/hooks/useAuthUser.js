@@ -18,7 +18,7 @@ export function useAuthUser() {
     if (current) {
       setAuthUser({
         uid: current.uid,
-        displayName: current.displayName || 'Sin nombre',
+        displayName: current.displayName || current.email || current.uid,
         photoURL: current.photoURL || null,
       });
     } else {
@@ -38,7 +38,7 @@ export function useAuthUser() {
       }
       setAuthUser({
         uid: firebaseUser.uid,
-        displayName: firebaseUser.displayName || 'Sin nombre',
+        displayName: firebaseUser.displayName || firebaseUser.email || firebaseUser.uid,
         photoURL: firebaseUser.photoURL || null,
       });
     });
@@ -59,6 +59,8 @@ export function useAuthUser() {
         const data = snapshot.data() || {};
         setProfile({
           role: getProfileRole(data),
+          displayName: data.username || data.displayName || data.name || data.nombre || null,
+          photoURL: data.photoURL || data.avatarUrl || null,
           matricula: data.matricula || null,
           subjects: Array.isArray(data.subjects) ? data.subjects : [],
         });
@@ -82,8 +84,8 @@ export function useAuthUser() {
     if (authUser === null) return null;
     return {
       uid: authUser.uid,
-      displayName: authUser.displayName || 'Sin nombre',
-      photoURL: authUser.photoURL || null,
+      displayName: profile?.displayName || authUser.displayName || authUser.uid,
+      photoURL: profile?.photoURL || authUser.photoURL || null,
       role: profile?.role || 'student',
       matricula: profile?.matricula || null,
       subjects: profile?.subjects || [],

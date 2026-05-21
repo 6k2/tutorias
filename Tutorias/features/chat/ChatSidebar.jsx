@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -11,6 +12,11 @@ import {
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { useUserConversations } from './hooks/useConversation';
 import { usePresence } from './hooks/usePresence';
+import {
+  initialForProfile,
+  partnerFromConversation,
+  stableColorForUid,
+} from './utils/profiles';
 
 export function ChatSidebar({
   currentUid,
@@ -49,9 +55,18 @@ export function ChatSidebar({
     const queryLower = search.trim().toLowerCase();
     return items.filter((conversation) => {
       if (!queryLower) return true;
-      const partner = conversation.participants?.find((item) => item.uid !== currentUid);
-      const name = partner?.displayName || 'Sin nombre';
-      return name.toLowerCase().includes(queryLower);
+      const partner = partnerFromConversation(conversation, currentUid);
+      const haystack = [
+        partner?.displayName,
+        partner?.relationship,
+        partner?.subjectName,
+        conversation.enrollmentMeta?.subjectName,
+        conversation.lastMessage,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(queryLower);
     });
   }, [items, search, currentUid]);
 
@@ -77,12 +92,14 @@ export function ChatSidebar({
         <View style={styles.headerButtons}>
           {fromCache && (
             <View style={[styles.cacheBadge, { borderColor: `${borderColor}44` }]}>
+              <MaterialIcons name="cloud-off" size={14} color={tintColor} />
               <Text style={[styles.cacheBadgeText, { color: tintColor }]}>Offline</Text>
             </View>
           )}
           {showCreateButton && typeof onCreateConversation === 'function' && (
             <Pressable onPress={() => onCreateConversation()} style={[styles.newButton, { borderColor: `${borderColor}44` }]}> 
-              <Text style={{ color: tintColor, fontWeight: '700' }}>Iniciar</Text>
+              <MaterialIcons name="add-comment" size={15} color={tintColor} />
+              <Text style={{ color: tintColor, fontWeight: '800' }}>Iniciar</Text>
             </Pressable>
           )}
         </View>
@@ -120,7 +137,7 @@ function ConversationRow({
   borderColor,
   textColor,
 }) {
-  const partner = conversation.participants?.find((item) => item.uid !== currentUid);
+  const partner = partnerFromConversation(conversation, currentUid);
   const presence = usePresence(partner?.uid);
   const lastMessage = conversation.lastMessage || 'Envia el primer mensaje';
   const lastMessageAt = conversation.lastMessageAt;
@@ -141,23 +158,26 @@ function ConversationRow({
         {partner?.photoURL ? (
           <Image source={{ uri: partner.photoURL }} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatarFallback, { backgroundColor: `${borderColor}33` }]}>
-            <Text style={[styles.avatarInitials, { color: textColor }]}>
-              {partner?.displayName?.[0]?.toUpperCase() || '?'}
-            </Text>
+          <View style={[styles.avatarFallback, { backgroundColor: partner?.avatarColor || stableColorForUid(partner?.uid) }]}>
+            <Text style={styles.avatarInitials}>{initialForProfile(partner)}</Text>
           </View>
         )}
       </View>
       <View style={styles.itemContent}>
         <View style={styles.itemHeader}>
           <Text style={[styles.name, { color: textColor }]} numberOfLines={1}>
-            {partner?.displayName || 'Sin nombre'}
+            {partner?.displayName || 'Contacto'}
           </Text>
           <Text style={[styles.time, { color: `${borderColor}aa` }]}>{formatTime(lastMessageAt)}</Text>
         </View>
         {conversation.enrollmentMeta?.subjectName ? (
           <Text style={[styles.subject, { color: `${borderColor}aa` }]} numberOfLines={1}>
             {conversation.enrollmentMeta.subjectName}
+          </Text>
+        ) : null}
+        {partner?.relationship ? (
+          <Text style={[styles.relationship, { color: `${borderColor}aa` }]} numberOfLines={1}>
+            {partner.relationship}
           </Text>
         ) : null}
         <View style={styles.itemFooter}>
@@ -214,6 +234,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
   },
   searchInput: {
     borderRadius: 16,
@@ -222,8 +243,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   cacheBadge: {
-    marginTop: 10,
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -236,6 +259,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   newButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     paddingHorizontal: 10,
@@ -283,7 +309,8 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '900',
+    color: '#fff',
   },
   itemContent: {
     flex: 1,
@@ -308,6 +335,11 @@ const styles = StyleSheet.create({
   subject: {
     fontSize: 12,
     marginBottom: 2,
+  },
+  relationship: {
+    fontSize: 11,
+    marginBottom: 2,
+    fontWeight: '700',
   },
   time: {
     fontSize: 12,

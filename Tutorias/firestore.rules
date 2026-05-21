@@ -16,6 +16,11 @@ service cloud.firestore {
         && get(conversationPath(conversationId)).data.participantUids.hasAny([request.auth.uid]);
     }
 
+    function authUidInConversationId(conversationId) {
+      return isSignedIn()
+        && conversationId.matches('.*' + request.auth.uid + '.*');
+    }
+
     function reservationPath(reservationId) {
       return /databases/$(database)/documents/reservations/$(reservationId);
     }
@@ -88,6 +93,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
         'conversationKey',
         'participantUids',
+        'participantProfiles',
         'createdAt',
         'updatedAt',
         'lastMessage',
@@ -116,6 +122,39 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadBy'])
         && request.auth.uid in resource.data.unreadBy
         && !(request.auth.uid in request.resource.data.unreadBy);
+    }
+
+    function validConversationProfileUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'participantProfiles',
+          'participantUids',
+          'subjectKey',
+          'subjectName',
+          'reservationId'
+        ])
+        && request.resource.data.conversationKey == resource.data.conversationKey
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.participantUids.hasAny([request.auth.uid]);
+    }
+
+    function validMessageCreate(conversationId) {
+      return request.resource.data.from == request.auth.uid
+        && request.resource.data.conversationId == conversationId
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly([
+          'conversationId',
+          'clientId',
+          'from',
+          'to',
+          'text',
+          'attachments',
+          'attachmentURL',
+          'attachmentType',
+          'senderName',
+          'createdAt',
+          'localCreatedAt',
+          'notified'
+        ]);
     }
 
     function validOfferCreate() {
@@ -276,6 +315,21 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.participantUids.size() == 2
         && request.resource.data.participantUids.hasAny([request.auth.uid])
+        && conversationId == request.resource.data.conversationKey
+        && request.resource.data.keys().hasOnly([
+          'conversationKey',
+          'participantUids',
+          'participantProfiles',
+          'createdAt',
+          'updatedAt',
+          'lastMessage',
+          'lastMessageAt',
+          'lastMessageMeta',
+          'unreadBy',
+          'subjectKey',
+          'subjectName',
+          'reservationId'
+        ])
         && request.resource.data.conversationKey ==
           (request.resource.data.participantUids[0] < request.resource.data.participantUids[1]
             ? request.resource.data.participantUids[0] + '_' + request.resource.data.participantUids[1]
@@ -283,33 +337,44 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
 
-      allow read: if authInConversation(conversationId);
+      allow get: if authInConversation(conversationId)
+        || authUidInConversationId(conversationId);
+      allow list: if authInConversation(conversationId);
 
       allow update: if authInConversation(conversationId)
-        && immutableConversationFields()
         && conversationFieldsOnly()
         && (
-          validMessagePreviewUpdate()
-          || validReadReceiptUpdate()
+          (
+            immutableConversationFields()
+            && (
+              validMessagePreviewUpdate()
+              || validReadReceiptUpdate()
+            )
+          )
+          || validConversationProfileUpdate()
         );
 
       allow delete: if false;
     }
 
     match /conversations/{conversationId}/participants/{participantId} {
-      allow read: if authInConversation(conversationId);
+      allow read: if (isSignedIn() && resource.data.uid == request.auth.uid)
+        || authInConversation(conversationId);
       allow create: if authInConversation(conversationId)
         && request.resource.data.uid in get(conversationPath(conversationId)).data.participantUids
         && request.resource.data.conversationId == conversationId;
       allow update, delete: if authInConversation(conversationId);
     }
 
+    match /{path=**}/participants/{participantId} {
+      allow read: if isSignedIn()
+        && resource.data.uid == request.auth.uid;
+    }
+
     match /conversations/{conversationId}/messages/{messageId} {
       allow read: if authInConversation(conversationId);
       allow create: if authInConversation(conversationId)
-        && request.resource.data.from == request.auth.uid
-        && request.resource.data.conversationId == conversationId
-        && request.resource.data.createdAt == request.time;
+        && validMessageCreate(conversationId);
       allow update, delete: if false;
     }
 
@@ -338,11 +403,9 @@ service cloud.firestore {
       }
 
       allow get, list: if isSignedIn()
-        && materialExists(materialId)
         && (
           resource.data.teacherId == request.auth.uid
           || resource.data.studentId == request.auth.uid
-          || authInReservation(materialData(materialId).reservationId)
         );
 
       allow create: if isSignedIn()

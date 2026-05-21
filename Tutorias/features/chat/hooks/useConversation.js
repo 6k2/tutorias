@@ -10,12 +10,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 import { ensureConversationRecord } from '../api/conversations';
-
-const buildConversationKey = (uidA, uidB) => {
-  if (!uidA || !uidB) return null;
-  const sorted = [uidA, uidB].sort();
-  return `${sorted[0]}_${sorted[1]}`;
-};
+import {
+  buildConversationKey,
+  partnerFromConversation,
+  participantsFromConversation,
+} from '../utils/profiles';
 
 const fetchParticipants = async (conversationRef) => {
   const participantsCollection = collection(conversationRef, 'participants');
@@ -26,7 +25,19 @@ const fetchParticipants = async (conversationRef) => {
   }));
 };
 
-
+const enrichConversation = (conversationDoc, enrollmentMeta, fallbackParticipants = []) => {
+  const data = conversationDoc.data() || {};
+  const conversation = {
+    id: conversationDoc.id,
+    ...data,
+    enrollmentMeta,
+  };
+  const profiles = participantsFromConversation(conversation);
+  return {
+    ...conversation,
+    participants: profiles.length ? profiles : fallbackParticipants,
+  };
+};
 
 export function useConversation(myUser, otherUser, options = {}) {
   const { allowedKeys = null, metaByKey = null } = options;
@@ -82,18 +93,21 @@ export function useConversation(myUser, otherUser, options = {}) {
           return;
         }
 
-        participantsRef.current = await fetchParticipants(conversationRef);
         unsubscribe = onSnapshot(conversationRef, (conversationDoc) => {
           if (!conversationDoc.exists()) {
             setConversation(null);
             return;
           }
-          setConversation({
-            id: conversationDoc.id,
-            ...conversationDoc.data(),
-            participants: participantsRef.current,
-            enrollmentMeta,
-          });
+          const next = enrichConversation(conversationDoc, enrollmentMeta, participantsRef.current);
+          setConversation(next);
+          if (!participantsFromConversation(next).length) {
+            fetchParticipants(conversationRef)
+              .then((participants) => {
+                participantsRef.current = participants;
+                if (active) setConversation(enrichConversation(conversationDoc, enrollmentMeta, participants));
+              })
+              .catch((error) => console.error('chat: failed to load participants', error));
+          }
         });
       } catch (bootstrapError) {
         console.error('chat: unable to prepare conversation', bootstrapError);
@@ -228,20 +242,16 @@ export function useUserConversations(uid, options = {}) {
                 return;
               }
 
-              let participants = [];
-              try {
-                participants = await fetchParticipants(conversationRef);
-              } catch (error) {
-                console.error('chat: failed to load participants', error);
-              }
-
               const enrollmentMeta = enrollmentForKey(data.conversationKey);
-              const nextItem = {
-                id: conversationDoc.id,
-                ...data,
-                participants,
-                enrollmentMeta,
-              };
+              let nextItem = enrichConversation(conversationDoc, enrollmentMeta);
+              if (!participantsFromConversation(nextItem).length) {
+                try {
+                  const participants = await fetchParticipants(conversationRef);
+                  nextItem = enrichConversation(conversationDoc, enrollmentMeta, participants);
+                } catch (error) {
+                  console.error('chat: failed to load participants', error);
+                }
+              }
 
               setItems((prev) => {
                 const filtered = prev.filter((item) => item.id !== conversationDoc.id);
@@ -304,4 +314,8 @@ export function useUserConversations(uid, options = {}) {
     loading,
     fromCache,
   };
+}
+
+export function getConversationPartner(conversation, currentUid) {
+  return partnerFromConversation(conversation, currentUid);
 }

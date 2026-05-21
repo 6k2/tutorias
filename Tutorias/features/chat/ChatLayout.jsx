@@ -1,4 +1,5 @@
 import React from 'react';
+import { MaterialIcons } from '@expo/vector-icons';
 import { View, StyleSheet, useWindowDimensions, Pressable, Text } from 'react-native';
 import { useThemeColor } from '../../hooks/useThemeColor';
 
@@ -17,7 +18,7 @@ export function ChatLayout({ sidebar, thread, isThreadOpen, onBack, offline = fa
       <View
         style={[styles.offlineBanner, { borderColor: `${divider}40`, backgroundColor: `${offlineBg}ee` }]}
       >
-        <Text style={[styles.offlineIcon, { color: tint }]}>[x]</Text>
+        <MaterialIcons name="cloud-off" size={16} color={tint} />
         <Text style={[styles.offlineText, { color: text }]}>Sin conexion</Text>
       </View>
     ) : null;

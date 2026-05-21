@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../../../app/config/firebase';
 import { RESERVATIONS_COLLECTION, RESERVATION_STATUS } from '../../../constants/firestore';
 import { useChatEnrollments } from './useChatEnrollments';
+import { displayNameForProfile, stableColorForUid } from '../utils/profiles';
 
 const emptySet = new Set();
 const emptyMap = new Map();
@@ -41,9 +42,9 @@ const contactContext = (row, relationship) => ({
   subjectKey: row.subjectKey || null,
   subjectName: row.subjectName || '',
   studentId: row.studentId || null,
-  studentDisplayName: row.studentDisplayName || 'Sin nombre',
+  studentDisplayName: row.studentDisplayName || 'Estudiante',
   teacherId: row.teacherId || null,
-  teacherDisplayName: row.teacherDisplayName || 'Sin nombre',
+  teacherDisplayName: row.teacherDisplayName || 'Docente',
   relationship,
 });
 
@@ -79,6 +80,10 @@ const mergeContact = (map, contact) => {
     relationship,
     contexts,
     subjectName: contexts.map((item) => item.subjectName).filter(Boolean).join(', '),
+    displayName: displayNameForProfile(existing, {
+      relationship,
+      subjectName: contexts[0]?.subjectName,
+    }),
   });
 };
 
@@ -157,11 +162,15 @@ export function useChatContacts(currentUser) {
         mergeContact(map, {
           id: `${row.studentId}:student`,
           uid: row.studentId,
-          displayName: row.studentDisplayName || 'Sin nombre',
+          displayName: displayNameForProfile(
+            { displayName: row.studentDisplayName, uid: row.studentId, role: 'student' },
+            { relationship: 'Estudiante', subjectName: row.subjectName }
+          ),
           role: 'student',
           relationship: 'Estudiante',
           subjectName: row.subjectName || '',
           conversationKey,
+          avatarColor: stableColorForUid(row.studentId),
           meta: contactContext(row, 'Estudiante'),
         });
         return;
@@ -171,11 +180,15 @@ export function useChatContacts(currentUser) {
       mergeContact(map, {
         id: `${row.teacherId}:teacher`,
         uid: row.teacherId,
-        displayName: row.teacherDisplayName || 'Docente',
+        displayName: displayNameForProfile(
+          { displayName: row.teacherDisplayName, uid: row.teacherId, role: 'teacher' },
+          { relationship: 'Docente', subjectName: row.subjectName }
+        ),
         role: 'teacher',
         relationship: 'Docente',
         subjectName: row.subjectName || '',
         conversationKey,
+        avatarColor: stableColorForUid(row.teacherId),
         meta: contactContext(row, 'Docente'),
       });
     });
@@ -187,11 +200,15 @@ export function useChatContacts(currentUser) {
         mergeContact(map, {
           id: `${row.studentId}:classmate`,
           uid: row.studentId,
-          displayName: row.studentDisplayName || 'Compañero',
+          displayName: displayNameForProfile(
+            { displayName: row.studentDisplayName, uid: row.studentId, role: 'student' },
+            { relationship: 'Compañero', subjectName: row.subjectName }
+          ),
           role: 'student',
           relationship: 'Compañero',
           subjectName: row.subjectName || '',
           conversationKey,
+          avatarColor: stableColorForUid(row.studentId),
           meta: contactContext(row, 'Compañero'),
         });
       });

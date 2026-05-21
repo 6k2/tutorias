@@ -1,158 +1,55 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ensureConversationRecord } from '../../features/chat/api/conversations';
 import { ChatSidebar } from '../../features/chat/ChatSidebar';
 import { ChatThread } from '../../features/chat/ChatThread';
-import { useAuthUser } from '../../features/chat/hooks/useAuthUser';
-import { useChatContacts } from '../../features/chat/hooks/useChatContacts';
-import { useUserConversations } from '../../features/chat/hooks/useConversation';
-import { usePresence, useSelfPresence } from '../../features/chat/hooks/usePresence';
-import { persistMessage } from '../../features/chat/utils/persistMessage';
-import { useMaterialsInbox } from '../../features/materials/hooks/useMaterialsInbox';
-import { ensureOfflineReady, useConnectivity, useOfflineSync } from '../../tools/offline';
+import { useChatController } from '../../features/chat/hooks/useChatController';
+import { usePresence } from '../../features/chat/hooks/usePresence';
+import { EmptyState, LoadingState, WebBadge, WebButton, WebCard, WebShell, webTokens } from '../../components/web/WebUI';
+import { initialForProfile, stableColorForUid } from '../../features/chat/utils/profiles';
 import { useTopAlert } from '../../components/TopAlert';
-import { EmptyState, LoadingState, WebBadge, WebButton, WebCard, WebShell, roleIsStudent, webTokens } from '../../components/web/WebUI';
 
 export default function ChatsWebScreen() {
-  const currentUser = useAuthUser();
-  const connectivity = useConnectivity();
+  const chat = useChatController();
   const topAlert = useTopAlert();
-  const [bootReady, setBootReady] = useState(false);
-  const [activeConversationId, setActiveConversationId] = useState(null);
-  const [pendingMessages, setPendingMessages] = useState({});
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
-  const [startingContactId, setStartingContactId] = useState('');
-  const selectionBootedRef = useRef(false);
 
-  useSelfPresence(currentUser?.uid);
-
-  useEffect(() => {
-    let alive = true;
-    ensureOfflineReady().finally(() => {
-      if (alive) setBootReady(true);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const contactsData = useChatContacts(currentUser);
-  const { items: conversations, loading, fromCache } = useUserConversations(currentUser?.uid, {
-    allowedKeys: contactsData.allowedKeys,
-    metaByKey: contactsData.metaByKey,
-  });
-  const isStudent = roleIsStudent(currentUser?.role);
-  const materialsInbox = useMaterialsInbox(isStudent ? currentUser?.uid : null, { disabled: !isStudent });
-
-  useEffect(() => {
-    if (!activeConversationId && conversations.length > 0 && !selectionBootedRef.current) {
-      setActiveConversationId(conversations[0].id);
-      selectionBootedRef.current = true;
-    }
-  }, [activeConversationId, conversations]);
-
-  const resolvePendingMessage = useCallback((conversationId, clientId) => {
-    setPendingMessages((prev) => {
-      const list = prev[conversationId] || [];
-      const next = list.filter((item) => item.clientId !== clientId);
-      if (!next.length) {
-        const clone = { ...prev };
-        delete clone[conversationId];
-        return clone;
-      }
-      return { ...prev, [conversationId]: next };
-    });
-  }, []);
-
-  const registerPendingMessage = useCallback((entry, payload) => {
-    if (!payload?.conversationId || !payload?.clientId) return;
-    setPendingMessages((prev) => ({
-      ...prev,
-      [payload.conversationId]: [...(prev[payload.conversationId] || []), { ...payload, entryId: entry?.id }],
-    }));
-  }, []);
-
-  const flushQueuedMessage = useCallback(async (payload) => {
-    if (!payload) return;
-    await persistMessage({
-      conversationId: payload.conversationId,
-      from: payload.from,
-      to: payload.to,
-      text: payload.text,
-      senderName: payload.senderName || currentUser?.displayName || 'Sin nombre',
-    });
-    resolvePendingMessage(payload.conversationId, payload.clientId);
-  }, [currentUser?.displayName, resolvePendingMessage]);
-
-  useOfflineSync({ 'chat:sendMessage': flushQueuedMessage }, { isOffline: connectivity.isOffline });
-
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId) || null,
-    [activeConversationId, conversations]
-  );
-
-  const activePartner = useMemo(() => {
-    if (!activeConversation) return null;
-    const currentUid = currentUser?.uid;
-    const participants = Array.isArray(activeConversation.participants) ? activeConversation.participants : [];
-    const match = participants.find((participant) => participant?.uid && participant.uid !== currentUid);
-    if (match) return match;
-    const meta = activeConversation.enrollmentMeta || {};
-    const uid = meta.studentId === currentUid ? meta.teacherId : meta.studentId;
-    return uid ? {
-      uid,
-      displayName: meta.studentId === uid ? meta.studentDisplayName : meta.teacherDisplayName,
-      subjectName: meta.subjectName,
-    } : null;
-  }, [activeConversation, currentUser?.uid]);
-
-  const partnerPresence = usePresence(activePartner?.uid);
-  const pendingForActive = activeConversationId ? pendingMessages[activeConversationId] || [] : [];
+  const partnerPresence = usePresence(chat.activePartner?.uid);
 
   const filteredContacts = useMemo(() => {
     const query = contactSearch.trim().toLowerCase();
-    if (!query) return contactsData.contacts;
-    return contactsData.contacts.filter((contact) => {
+    if (!query) return chat.contactsData.contacts;
+    return chat.contactsData.contacts.filter((contact) => {
       const haystack = [
         contact.displayName,
         contact.relationship,
         contact.subjectName,
         ...(contact.contexts || []).map((context) => context.subjectName),
-      ].join(' ').toLowerCase();
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       return haystack.includes(query);
     });
-  }, [contactSearch, contactsData.contacts]);
+  }, [contactSearch, chat.contactsData.contacts]);
 
   const startConversation = async (contact) => {
-    if (!contact?.uid || !currentUser) return;
-    setStartingContactId(contact.id);
     try {
-      const ref = await ensureConversationRecord({
-        myUser: currentUser,
-        otherUser: contact,
-        meta: contact.meta,
-      });
-      if (ref) {
-        selectionBootedRef.current = true;
-        setActiveConversationId(ref.id);
-      }
+      await chat.startConversation(contact);
       setCreateModalVisible(false);
       setContactSearch('');
     } catch (error) {
       console.error('chat: failed to start conversation', error);
       topAlert.show('No se pudo iniciar la conversación.', 'error');
-    } finally {
-      setStartingContactId('');
     }
   };
 
-  if (!bootReady || currentUser === undefined) {
+  if (!chat.bootReady || chat.currentUser === undefined) {
     return <WebShell title="Chats" active="/chats"><LoadingState label="Preparando conversaciones..." /></WebShell>;
   }
 
-  if (!currentUser) {
+  if (!chat.currentUser) {
     return (
       <WebShell title="Chats" subtitle="Inicia sesión para conversar con docentes y estudiantes." active="/chats">
         <EmptyState icon="lock" title="Necesitas iniciar sesión" text="Los chats se activan cuando entras a tu cuenta." />
@@ -163,12 +60,16 @@ export default function ChatsWebScreen() {
   return (
     <WebShell
       title="Chats"
-      subtitle="Inicia conversaciones solo con docentes y compañeros conectados a tus matrículas confirmadas."
+      subtitle="Conversaciones de tus matrículas confirmadas, con mensajes en tiempo real."
       active="/chats"
       actions={
         <>
-          {connectivity.isOffline || fromCache || contactsData.fromCache ? <WebBadge tone="amber" icon="cloud-off">Modo sin conexión</WebBadge> : null}
-          {isStudent && materialsInbox.newCount ? <WebBadge tone="amber" icon="notifications">{materialsInbox.newCount} materiales nuevos</WebBadge> : null}
+          {chat.connectivity.isOffline || chat.conversationsFromCache || chat.contactsData.fromCache ? (
+            <WebBadge tone="amber" icon="cloud-off">Modo sin conexión</WebBadge>
+          ) : null}
+          {chat.isStudent && chat.materialsInbox.newCount ? (
+            <WebBadge tone="amber" icon="notifications">{chat.materialsInbox.newCount} materiales nuevos</WebBadge>
+          ) : null}
           <WebButton label="Iniciar conversación" icon="add-comment" onPress={() => setCreateModalVisible(true)} />
         </>
       }
@@ -176,10 +77,10 @@ export default function ChatsWebScreen() {
       <ContactPickerModal
         visible={createModalVisible}
         contacts={filteredContacts}
-        rawCount={contactsData.contacts.length}
-        loading={contactsData.loading}
+        rawCount={chat.contactsData.contacts.length}
+        loading={chat.contactsData.loading}
         search={contactSearch}
-        startingContactId={startingContactId}
+        startingContactId={chat.startingContactId}
         onSearch={setContactSearch}
         onClose={() => setCreateModalVisible(false)}
         onStart={startConversation}
@@ -188,51 +89,53 @@ export default function ChatsWebScreen() {
       <WebCard style={styles.chatFrame}>
         <View style={styles.sidebarPane}>
           <ChatSidebar
-            currentUid={currentUser.uid}
-            conversations={conversations}
-            loadingConversations={loading}
-            fromCache={fromCache}
-            onSelectConversation={(conversation) => setActiveConversationId(conversation.id)}
-            activeConversationId={activeConversationId}
-            loadingEnrollments={contactsData.loading}
+            currentUid={chat.currentUser.uid}
+            conversations={chat.conversations}
+            loadingConversations={chat.conversationsLoading}
+            fromCache={chat.conversationsFromCache}
+            onSelectConversation={chat.selectConversation}
+            activeConversationId={chat.activeConversationId}
+            loadingEnrollments={chat.contactsData.loading}
             onCreateConversation={() => setCreateModalVisible(true)}
             bottomOffset={0}
             showCreateButton
           />
         </View>
         <View style={styles.threadPane}>
-          {activePartner ? (
+          {chat.activePartner ? (
             <View style={styles.threadHeader}>
-              <View style={styles.partnerAvatar}>
-                <Text style={styles.partnerInitial}>{(activePartner.displayName || '?')[0].toUpperCase()}</Text>
+              <View style={[styles.partnerAvatar, { backgroundColor: chat.activePartner.avatarColor || stableColorForUid(chat.activePartner.uid) }]}>
+                <Text style={styles.partnerInitial}>{initialForProfile(chat.activePartner)}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.partnerName}>{activePartner.displayName || 'Sin nombre'}</Text>
+                <Text style={styles.partnerName}>{chat.activePartner.displayName || 'Contacto'}</Text>
                 <Text style={styles.partnerMeta}>
-                  {partnerPresence.online ? 'En línea ahora' : 'Fuera de línea'}{activePartner.subjectName ? ` · ${activePartner.subjectName}` : ''}
+                  {partnerPresence.online ? 'En línea ahora' : 'Fuera de línea'}
+                  {chat.activePartner.subjectName ? ` · ${chat.activePartner.subjectName}` : ''}
+                  {chat.activePartner.relationship ? ` · ${chat.activePartner.relationship}` : ''}
                 </Text>
               </View>
               <MaterialIcons name="more-horiz" size={24} color={webTokens.color.brand} />
             </View>
           ) : null}
-          {!activeConversation && !loading ? (
+          {!chat.activeConversation && !chat.conversationsLoading ? (
             <EmptyState
               icon="forum"
               title="Selecciona o inicia una conversación"
-              text="Usa el botón de iniciar conversación para ver docentes y compañeros disponibles."
+              text="Tus docentes y compañeros disponibles aparecen según tus matrículas confirmadas."
             />
           ) : (
             <ChatThread
-              conversation={activeConversation}
-              currentUser={currentUser}
-              partner={activePartner}
-              pendingMessages={pendingForActive}
-              onQueueMessage={registerPendingMessage}
+              conversation={chat.activeConversation}
+              currentUser={chat.currentUser}
+              partner={chat.activePartner}
+              pendingMessages={chat.pendingForActive}
+              onQueueMessage={chat.registerPendingMessage}
               bottomInset={0}
               showHeader={false}
             />
           )}
-          {loading ? (
+          {chat.conversationsLoading ? (
             <View style={styles.overlayLoading}><ActivityIndicator color={webTokens.color.brand} /></View>
           ) : null}
         </View>
@@ -283,7 +186,7 @@ function ContactPickerModal({
             <EmptyState
               icon="groups"
               title="Aún no hay usuarios disponibles"
-              text="Cuando tengas matrículas confirmadas, aquí verás al docente y a tus compañeros de materia."
+              text="Cuando tengas matrículas confirmadas, aquí verás al docente y a tus compañeros."
             />
           ) : contacts.length === 0 ? (
             <EmptyState icon="search-off" title="Sin resultados" text="Prueba con otro nombre o materia." />
@@ -306,7 +209,6 @@ function ContactPickerModal({
 }
 
 function ContactRow({ contact, loading, onStart }) {
-  const initial = (contact.displayName || '?')[0].toUpperCase();
   const subjects = (contact.contexts || [])
     .map((context) => context.subjectName)
     .filter(Boolean)
@@ -315,12 +217,12 @@ function ContactRow({ contact, loading, onStart }) {
 
   return (
     <View style={styles.contactRow}>
-      <View style={styles.contactAvatar}>
-        <Text style={styles.contactInitial}>{initial}</Text>
+      <View style={[styles.contactAvatar, { backgroundColor: contact.avatarColor || stableColorForUid(contact.uid) }]}>
+        <Text style={styles.contactInitial}>{initialForProfile(contact)}</Text>
       </View>
       <View style={styles.contactBody}>
         <View style={styles.contactTop}>
-          <Text style={styles.contactName}>{contact.displayName || 'Sin nombre'}</Text>
+          <Text style={styles.contactName}>{contact.displayName || 'Contacto'}</Text>
           <WebBadge tone={contact.relationship.includes('Docente') ? 'blue' : 'green'}>
             {contact.relationship}
           </WebBadge>
@@ -365,10 +267,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: webTokens.color.chip,
   },
   partnerInitial: {
-    color: webTokens.color.brand,
+    color: '#fff',
     fontWeight: '900',
     fontSize: 18,
   },
@@ -461,10 +362,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: webTokens.color.chip,
   },
   contactInitial: {
-    color: webTokens.color.brand,
+    color: '#fff',
     fontWeight: '900',
     fontSize: 18,
   },

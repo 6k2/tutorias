@@ -48,9 +48,16 @@ export const auth = _auth;
 // On unsupported devices we warn and downgrade to an in-memory cache so the app still works.
 let _db;
 if (Platform.OS === "web") {
-  _db = getFirestore(app);
+  try {
+    _db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      useFetchStreams: false,
+      localCache: memoryLocalCache(),
+    });
+  } catch (_error) {
+    _db = getFirestore(app);
+  }
 } else {
-<<<<<<< HEAD
   const nativeFirestoreSettings = {
     experimentalAutoDetectLongPolling: true,
     useFetchStreams: false,
@@ -61,8 +68,6 @@ if (Platform.OS === "web") {
     ...options,
   });
 
-=======
->>>>>>> parent of 68c1754 (Add web UI screens and tab layout)
   try {
     _db = initializeFirestore(
       app,

@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { MaterialIcons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -21,10 +23,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../app/config/firebase';
 import { useThemeColor } from '../../hooks/useThemeColor';
-import { usePresence, subscribeTyping } from './hooks/usePresence';
+import { initialForProfile, stableColorForUid } from './utils/profiles';
+import { subscribeTyping, usePresence } from './hooks/usePresence';
 import { MessageInput } from './MessageInput';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 24;
 
 export function ChatThread({
   conversation,
@@ -33,6 +36,7 @@ export function ChatThread({
   pendingMessages = [],
   onQueueMessage,
   bottomInset = 0,
+  showHeader = true,
 }) {
   const conversationId = conversation?.id;
   const [messages, setMessages] = useState([]);
@@ -41,16 +45,16 @@ export function ChatThread({
   const [reachedEnd, setReachedEnd] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const listRef = useRef(null);
+  const nearBottomRef = useRef(true);
 
   const presence = usePresence(partner?.uid);
-
   const background = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
   const mutedColor = useThemeColor({}, 'icon');
   const borderColor = `${mutedColor}40`;
   const safeBottomInset = Math.max(0, bottomInset);
-  const listBottomPadding = safeBottomInset + 120;
 
   useEffect(() => {
     setMessages([]);
@@ -68,12 +72,16 @@ export function ChatThread({
     const unsubscribe = onSnapshot(
       messagesQuery,
       (snapshot) => {
-        const docs = snapshot.docs.map((docSnapshot) => ({
-          id: docSnapshot.id,
-          ...docSnapshot.data(),
-        }));
-        setMessages(docs.reverse());
+        const docs = snapshot.docs
+          .map((docSnapshot) => ({
+            id: docSnapshot.id,
+            status: 'sent',
+            ...docSnapshot.data(),
+          }))
+          .reverse();
+        setMessages(docs);
         setCursor(snapshot.docs[snapshot.docs.length - 1] || null);
+        setReachedEnd(snapshot.docs.length < PAGE_SIZE);
         setLoading(false);
       },
       (error) => {
@@ -87,16 +95,23 @@ export function ChatThread({
 
   useEffect(() => {
     if (!conversationId || !currentUser?.uid) return undefined;
-    const conversationRef = doc(db, 'conversations', conversationId);
-    updateDoc(conversationRef, {
+    updateDoc(doc(db, 'conversations', conversationId), {
       unreadBy: arrayRemove(currentUser.uid),
     }).catch(() => {});
-  }, [conversationId, currentUser?.uid]);
+  }, [conversationId, currentUser?.uid, messages.length]);
 
   useEffect(() => {
     if (!conversationId || !partner?.uid) return undefined;
     return subscribeTyping(conversationId, partner.uid, setIsPartnerTyping);
   }, [conversationId, partner?.uid]);
+
+  useEffect(() => {
+    if (!nearBottomRef.current) return;
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToEnd?.({ animated: true });
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [messages.length, pendingMessages.length, isPartnerTyping]);
 
   const loadOlder = useCallback(async () => {
     if (!conversationId || !cursor || reachedEnd || loadingOlder) return;
@@ -114,12 +129,16 @@ export function ChatThread({
         setReachedEnd(true);
         return;
       }
-      const docs = snapshot.docs.map((docSnapshot) => ({
-        id: docSnapshot.id,
-        ...docSnapshot.data(),
-      }));
-      setMessages((prev) => [...docs.reverse(), ...prev]);
+      const docs = snapshot.docs
+        .map((docSnapshot) => ({
+          id: docSnapshot.id,
+          status: 'sent',
+          ...docSnapshot.data(),
+        }))
+        .reverse();
+      setMessages((prev) => [...docs, ...prev]);
       setCursor(snapshot.docs[snapshot.docs.length - 1]);
+      if (snapshot.docs.length < PAGE_SIZE) setReachedEnd(true);
     } catch (error) {
       console.error('chat: load older failed', error);
     } finally {
@@ -128,26 +147,43 @@ export function ChatThread({
   }, [conversationId, cursor, reachedEnd, loadingOlder]);
 
   const normalizedPending = useMemo(() => {
-    if (!pendingMessages || pendingMessages.length === 0) return [];
-    return pendingMessages.map((pending) => ({
+    return (pendingMessages || []).map((pending) => ({
       id: `pending:${pending.clientId}`,
+      clientId: pending.clientId,
       text: pending.text,
+      attachments: [],
       createdAt: pending.queuedAt,
+      localCreatedAt: pending.queuedAt,
       from: pending.from || currentUser?.uid,
       to: pending.to || partner?.uid,
+      status: 'sending',
       pending: true,
     }));
   }, [pendingMessages, currentUser?.uid, partner?.uid]);
 
   const combinedMessages = useMemo(() => {
-    const merged = [...messages, ...normalizedPending];
-    merged.sort((a, b) => getMillis(a) - getMillis(b));
-    return merged;
+    const byClientId = new Map();
+    [...messages, ...normalizedPending].forEach((message) => {
+      const key = message.clientId || message.id;
+      const existing = byClientId.get(key);
+      if (!existing || existing.pending) {
+        byClientId.set(key, message);
+      }
+    });
+    return [...byClientId.values()].sort((a, b) => getMillis(a) - getMillis(b));
   }, [messages, normalizedPending]);
+
+  const handleScroll = useCallback((event) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    nearBottomRef.current = distanceFromBottom < 96;
+  }, []);
 
   if (!conversationId) {
     return (
       <View style={[styles.emptyThread, { backgroundColor: background }]}>
+        <MaterialIcons name="forum" size={38} color={mutedColor} />
         <Text style={[styles.emptyText, { color: mutedColor }]}>
           Selecciona una conversacion.
         </Text>
@@ -156,33 +192,18 @@ export function ChatThread({
   }
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: background, paddingBottom: safeBottomInset }]}
-    >
-      <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <View style={[styles.headerAvatar, { backgroundColor: `${mutedColor}30` }]}>
-          {partner?.photoURL ? (
-            <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
-          ) : (
-            <Text style={[styles.headerInitials, { color: textColor }]}>
-              {partner?.displayName?.[0]?.toUpperCase() || '?'}
-            </Text>
-          )}
-        </View>
-        <View style={styles.headerInfo}>
-          <Text style={[styles.headerName, { color: textColor }]}>
-            {partner?.displayName || 'Sin nombre'}
-          </Text>
-          <Text style={[styles.headerPresence, { color: mutedColor }]}>
-            {isPartnerTyping
-              ? 'Escribiendo...'
-              : presence.online
-              ? 'En linea'
-              : formatLastSeen(presence.lastSeen)}
-          </Text>
-        </View>
-      </View>
+    <View style={[styles.container, { backgroundColor: background, paddingBottom: safeBottomInset }]}>
+      {showHeader ? (
+        <ThreadHeader
+          partner={partner}
+          presence={presence}
+          textColor={textColor}
+          mutedColor={mutedColor}
+          borderColor={borderColor}
+        />
+      ) : null}
       <FlatList
+        ref={listRef}
         data={combinedMessages}
         renderItem={({ item }) => (
           <MessageBubble
@@ -194,12 +215,26 @@ export function ChatThread({
           />
         )}
         keyExtractor={(item) => item.id}
-        inverted
-        contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
-        onEndReachedThreshold={0.2}
-        onEndReached={loadOlder}
+        contentContainerStyle={styles.listContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={80}
+        ListHeaderComponent={
+          !reachedEnd && combinedMessages.length ? (
+            <Pressable style={styles.loadOlder} onPress={loadOlder} disabled={loadingOlder}>
+              {loadingOlder ? (
+                <ActivityIndicator color={tintColor} />
+              ) : (
+                <Text style={[styles.loadOlderText, { color: tintColor }]}>Cargar anteriores</Text>
+              )}
+            </Pressable>
+          ) : null
+        }
         ListFooterComponent={
-          loadingOlder ? <ActivityIndicator color={tintColor} style={styles.loadingMore} /> : null
+          isPartnerTyping ? (
+            <View style={styles.typingRow}>
+              <Text style={[styles.typingText, { color: mutedColor }]}>Escribiendo...</Text>
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           loading ? (
@@ -211,11 +246,6 @@ export function ChatThread({
           )
         }
       />
-      {isPartnerTyping && (
-        <View style={styles.typingRow}>
-          <Text style={[styles.typingText, { color: mutedColor }]}>Escribiendo...</Text>
-        </View>
-      )}
       <MessageInput
         conversationId={conversationId}
         currentUser={currentUser}
@@ -226,41 +256,64 @@ export function ChatThread({
   );
 }
 
+function ThreadHeader({ partner, presence, textColor, mutedColor, borderColor }) {
+  const color = partner?.avatarColor || stableColorForUid(partner?.uid);
+  return (
+    <View style={[styles.header, { borderBottomColor: borderColor }]}>
+      <View style={[styles.headerAvatar, { backgroundColor: color }]}>
+        {partner?.photoURL ? (
+          <Image source={{ uri: partner.photoURL }} style={styles.headerImage} />
+        ) : (
+          <Text style={styles.headerInitials}>{initialForProfile(partner)}</Text>
+        )}
+      </View>
+      <View style={styles.headerInfo}>
+        <Text style={[styles.headerName, { color: textColor }]}>{partner?.displayName || 'Contacto'}</Text>
+        <Text style={[styles.headerPresence, { color: mutedColor }]}>
+          {presence.online ? 'En linea' : formatLastSeen(presence.lastSeen)}
+          {partner?.subjectName ? ` · ${partner.subjectName}` : ''}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor }) {
-  const alignStyle = isOwnMessage ? styles.rowRight : styles.rowLeft;
-  const bubbleStyle = isOwnMessage
-    ? [styles.bubbleBase, styles.bubbleOwn, { backgroundColor: tintColor }]
-    : [
-        styles.bubbleBase,
-        styles.bubbleOther,
-        { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` },
-      ];
-  const bubbleTextColor = isOwnMessage
-    ? isColorLight(tintColor)
-      ? '#111115'
-      : '#fff'
-    : textColor;
-  const timestampColor = isOwnMessage
-    ? isColorLight(tintColor)
-      ? '#11111599'
-      : '#ffffffcc'
-    : mutedColor;
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  const bubbleTextColor = isOwnMessage ? '#fff' : textColor;
+  const timestampColor = isOwnMessage ? '#ffffffcc' : mutedColor;
 
   return (
-    <View style={[styles.messageRow, alignStyle]}>
-      <View style={bubbleStyle}>
+    <View style={[styles.messageRow, isOwnMessage ? styles.rowRight : styles.rowLeft]}>
+      <View
+        style={[
+          styles.bubbleBase,
+          isOwnMessage
+            ? [styles.bubbleOwn, { backgroundColor: tintColor }]
+            : [styles.bubbleOther, { borderColor: `${mutedColor}55`, backgroundColor: `${mutedColor}15` }],
+        ]}
+      >
         {message.text ? (
           <Text style={[styles.messageText, { color: bubbleTextColor }]}>{message.text}</Text>
         ) : null}
-        {message.attachmentURL ? (
-          <Text style={[styles.attachmentText, { color: bubbleTextColor }]}>Archivo adjunto</Text>
-        ) : null}
-        {message.pending && (
-          <Text style={[styles.pendingText, { color: bubbleTextColor }]}>Pendiente...</Text>
-        )}
-        <Text style={[styles.timestamp, { color: timestampColor }]}>
-          {formatTimestamp(message.createdAt)}
-        </Text>
+        {attachments.map((attachment, index) => (
+          <View key={`${attachment.url || attachment.name || index}`} style={styles.attachmentBubble}>
+            <MaterialIcons
+              name={attachment.type === 'image' ? 'image' : 'attach-file'}
+              size={16}
+              color={bubbleTextColor}
+            />
+            <Text style={[styles.attachmentText, { color: bubbleTextColor }]} numberOfLines={1}>
+              {attachment.name || (attachment.type === 'image' ? 'Imagen' : 'Archivo')}
+            </Text>
+          </View>
+        ))}
+        <View style={styles.metaRow}>
+          {message.pending ? (
+            <Text style={[styles.pendingText, { color: timestampColor }]}>Enviando</Text>
+          ) : null}
+          <Text style={[styles.timestamp, { color: timestampColor }]}>{formatTimestamp(message)}</Text>
+        </View>
       </View>
     </View>
   );
@@ -268,21 +321,18 @@ function MessageBubble({ message, isOwnMessage, textColor, tintColor, mutedColor
 
 function getMillis(message) {
   const value = message?.createdAt;
-  if (!value) return 0;
   if (typeof value === 'number') return value;
   if (value?.toMillis) return value.toMillis();
   if (typeof value?.seconds === 'number') return value.seconds * 1000;
+  if (message?.localCreatedAt) return message.localCreatedAt;
   return 0;
 }
 
-function formatTimestamp(timestamp) {
-  if (!timestamp) return '';
+function formatTimestamp(message) {
+  const millis = getMillis(message);
+  if (!millis) return '';
   try {
-    if (typeof timestamp === 'number') {
-      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(millis).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch {
     return '';
   }
@@ -294,27 +344,6 @@ function formatLastSeen(lastSeen) {
   return `Visto ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function isColorLight(color) {
-  if (!color) return false;
-  const sanitized = String(color).trim().replace('#', '');
-  if (sanitized.length !== 3 && sanitized.length !== 6) {
-    return false;
-  }
-  const normalized =
-    sanitized.length === 3
-      ? sanitized
-          .split('')
-          .map((char) => `${char}${char}`)
-          .join('')
-      : sanitized;
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  if ([r, g, b].some(Number.isNaN)) return false;
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness >= 186;
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -323,6 +352,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 10,
   },
   header: {
     flexDirection: 'row',
@@ -334,7 +364,7 @@ const styles = StyleSheet.create({
   headerAvatar: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -346,20 +376,33 @@ const styles = StyleSheet.create({
   },
   headerInitials: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '900',
+    color: '#fff',
   },
   headerInfo: {
     flex: 1,
   },
   headerName: {
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   headerPresence: {
     fontSize: 13,
+    marginTop: 2,
   },
   listContent: {
     padding: 16,
+    flexGrow: 1,
+  },
+  loadOlder: {
+    alignSelf: 'center',
+    minHeight: 34,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  loadOlderText: {
+    fontWeight: '800',
   },
   messageRow: {
     marginBottom: 10,
@@ -371,49 +414,61 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubbleBase: {
-    maxWidth: '80%',
+    maxWidth: '78%',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    gap: 5,
   },
   bubbleOwn: {
-    borderTopRightRadius: 4,
+    borderTopRightRadius: 6,
   },
   bubbleOther: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 4,
+    borderTopLeftRadius: 6,
   },
   messageText: {
     fontSize: 15,
-    marginBottom: 4,
+    lineHeight: 21,
+  },
+  attachmentBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   attachmentText: {
     fontSize: 13,
-    marginBottom: 4,
+    fontWeight: '700',
+    maxWidth: 220,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 7,
   },
   timestamp: {
     fontSize: 11,
-    textAlign: 'right',
   },
   pendingText: {
     fontSize: 11,
-    marginBottom: 2,
+    fontWeight: '700',
   },
   emptyState: {
+    flex: 1,
     padding: 24,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     fontSize: 14,
+    textAlign: 'center',
   },
   emptyLoader: {
     marginVertical: 24,
   },
-  loadingMore: {
-    marginVertical: 16,
-  },
   typingRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 4,
     paddingVertical: 8,
   },
   typingText: {

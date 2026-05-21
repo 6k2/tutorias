@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useConfirmedEnrollments } from '../../materials/hooks/useConfirmedEnrollments';
+import { displayNameForProfile } from '../utils/profiles';
 
 const emptySet = new Set();
 const emptyMap = new Map();
@@ -21,17 +22,29 @@ export function useChatEnrollments(currentUser) {
         return {
           id: row.id,
           studentId,
-          studentDisplayName:
-            row.studentDisplayName ||
-            row.reservation?.studentDisplayName ||
-            row.reservation?.studentName ||
-            'Sin nombre',
+          studentDisplayName: displayNameForProfile(
+            {
+              displayName:
+                row.studentDisplayName ||
+                row.reservation?.studentDisplayName ||
+                row.reservation?.studentName,
+              role: 'student',
+              uid: studentId,
+            },
+            { relationship: 'Estudiante', subjectName: row.subjectName }
+          ),
           teacherId,
-          teacherDisplayName:
-            row.teacherDisplayName ||
-            row.reservation?.teacherDisplayName ||
-            row.reservation?.teacherName ||
-            'Sin nombre',
+          teacherDisplayName: displayNameForProfile(
+            {
+              displayName:
+                row.teacherDisplayName ||
+                row.reservation?.teacherDisplayName ||
+                row.reservation?.teacherName,
+              role: 'teacher',
+              uid: teacherId,
+            },
+            { relationship: 'Docente', subjectName: row.subjectName }
+          ),
           subjectKey: row.subjectKey || null,
           subjectName: row.subjectName || '',
           conversationKey,

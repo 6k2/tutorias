@@ -1,14 +1,17 @@
-# Firebase Functions (Chat helpers)
+# Firebase Functions (Opcional)
 
-## Requisitos rápidos
-- Node.js 20+
-- Firebase CLI (`npm install -g firebase-tools`)
+El proyecto queda soportado en Firebase Spark/free sin depender de Cloud Functions.
+El chat escribe mensajes y resumen de conversacion desde el cliente con `writeBatch`.
 
-## Flujo de trabajo
+Esta carpeta se conserva solo como codigo opcional para proyectos en Blaze:
+- `onMessageCreate` puede duplicar la actualizacion de resumen/unread si algun dia se habilitan Functions.
+- `onTutoringMaterialCreate` sirve para notificaciones push si el proyecto sube a Blaze.
+
+## Scripts utiles sin Blaze
 1. `cd functions`
-2. Instala dependencias: `npm install`
-3. Para usar el código TypeScript (`index.ts`) ejecuta `npx tsc index.ts --outDir lib` o configura un build real (TODO).
-4. Emula con `firebase emulators:start --only functions`
-5. Despliega con `npm run deploy`
+2. `npm install`
+3. `npm run build`
+4. `npm run migrate:chat:dry-run`
+5. `npm run migrate:chat:apply`
 
-> TODO: agregar build paso a paso cuando formalicemos el pipeline TS.
+La migracion usa Admin SDK y requiere credenciales locales, por ejemplo `GOOGLE_APPLICATION_CREDENTIALS`.

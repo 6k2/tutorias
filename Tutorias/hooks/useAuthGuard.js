@@ -29,8 +29,9 @@ const decodeJwtPayload = (token) => {
       const decoded = globalThis.atob(padded);
       return JSON.parse(decoded);
     }
-    if (typeof Buffer !== 'undefined') {
-      const decoded = Buffer.from(padded, 'base64').toString('utf8');
+    const BufferCtor = globalThis?.Buffer;
+    if (typeof BufferCtor !== 'undefined') {
+      const decoded = BufferCtor.from(padded, 'base64').toString('utf8');
       return JSON.parse(decoded);
     }
   } catch (error) {

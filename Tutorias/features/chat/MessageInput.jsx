@@ -1,17 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {
   getDownloadURL,
   getStorage,
   ref as storageRef,
-  uploadBytes,
+  uploadBytesResumable,
 } from 'firebase/storage';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { app } from '../../app/config/firebase';
-import { setTyping as setTypingFlag } from './hooks/usePresence';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { enqueueSyncAction, useConnectivity } from '../../tools/offline';
+import { setTyping as setTypingFlag } from './hooks/usePresence';
 import { persistMessage } from './utils/persistMessage';
 
 export function MessageInput({ conversationId, currentUser, partner, onQueueMessage }) {
@@ -19,6 +20,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
   const [attachment, setAttachment] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const typingTimeout = useRef(null);
   const connectivity = useConnectivity();
 
@@ -32,6 +34,11 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
       ? `offline:chatDraft:${currentUser.uid}:${conversationId}`
       : null;
 
+  const makeMessageId = useCallback(
+    () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    []
+  );
+
   const restoreDraft = useCallback(async () => {
     if (!draftKey) {
       setText('');
@@ -40,17 +47,14 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
     }
     try {
       const raw = await AsyncStorage.getItem(draftKey);
-      if (!raw) {
-        setText('');
-        return;
-      }
-      const parsed = JSON.parse(raw);
+      const parsed = raw ? JSON.parse(raw) : null;
       setText(parsed?.text || '');
     } catch (draftError) {
       console.warn('chat: draft restore failed', draftError);
       setText('');
     }
     setAttachment(null);
+    setUploadProgress(0);
     setError(null);
   }, [draftKey]);
 
@@ -67,9 +71,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
 
   useEffect(
     () => () => {
-      if (typingTimeout.current) {
-        clearTimeout(typingTimeout.current);
-      }
+      if (typingTimeout.current) clearTimeout(typingTimeout.current);
       if (conversationId && currentUser?.uid) {
         setTypingFlag(conversationId, currentUser.uid, false);
       }
@@ -80,9 +82,8 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
   const resetComposer = useCallback(() => {
     setText('');
     setAttachment(null);
-    if (draftKey) {
-      AsyncStorage.removeItem(draftKey).catch(() => {});
-    }
+    setUploadProgress(0);
+    if (draftKey) AsyncStorage.removeItem(draftKey).catch(() => {});
     if (conversationId && currentUser?.uid) {
       setTypingFlag(conversationId, currentUser.uid, false);
     }
@@ -93,9 +94,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
       setText(value);
       if (!conversationId || !currentUser?.uid) return;
       setTypingFlag(conversationId, currentUser.uid, value.length > 0);
-      if (typingTimeout.current) {
-        clearTimeout(typingTimeout.current);
-      }
+      if (typingTimeout.current) clearTimeout(typingTimeout.current);
       typingTimeout.current = setTimeout(() => {
         setTypingFlag(conversationId, currentUser.uid, false);
       }, 3000);
@@ -124,7 +123,10 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
         name: asset.fileName || `archivo-${Date.now()}.${isPdf ? 'pdf' : 'jpg'}`,
         type: isPdf ? 'pdf' : 'image',
         mimeType: asset.mimeType || (isPdf ? 'application/pdf' : 'image/jpeg'),
+        sizeBytes: asset.fileSize || null,
       });
+      setUploadProgress(0);
+      setError(null);
     } catch (pickError) {
       console.error('No se pudo seleccionar archivo', pickError);
       setError('No se pudo seleccionar el archivo.');
@@ -132,15 +134,36 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
   }, [connectivity.isOffline]);
 
   const uploadAttachment = useCallback(
-    async (file) => {
+    async (file, messageId) => {
       const storage = getStorage(app);
-      const path = `conversations/${conversationId}/${Date.now()}-${file.name}`;
+      const safeName = String(file.name || `adjunto-${Date.now()}`).replace(/[^A-Za-z0-9._-]/g, '_');
+      const path = `conversations/${conversationId}/${messageId}/${safeName}`;
       const fileRef = storageRef(storage, path);
       const response = await fetch(file.uri);
       const blob = await response.blob();
-      await uploadBytes(fileRef, blob, { contentType: file.mimeType });
+
+      await new Promise((resolve, reject) => {
+        const task = uploadBytesResumable(fileRef, blob, { contentType: file.mimeType });
+        task.on(
+          'state_changed',
+          (snapshot) => {
+            const total = snapshot.totalBytes || 1;
+            setUploadProgress(Math.round((snapshot.bytesTransferred / total) * 100));
+          },
+          reject,
+          resolve
+        );
+      });
+
       const url = await getDownloadURL(fileRef);
-      return { url, type: file.type };
+      return {
+        url,
+        type: file.type,
+        name: file.name,
+        mimeType: file.mimeType,
+        storagePath: path,
+        sizeBytes: file.sizeBytes,
+      };
     },
     [conversationId]
   );
@@ -158,6 +181,9 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
 
     try {
       const trimmed = text.trim();
+      const messageId = makeMessageId();
+      const clientId = `${conversationId}:${messageId}`;
+
       if (connectivity.isOffline) {
         if (attachment) {
           setError('No se pueden enviar adjuntos sin conexion.');
@@ -165,11 +191,12 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
         }
         const payload = {
           conversationId,
+          messageId,
+          clientId,
           from: currentUser.uid,
           to: partner.uid,
           text: trimmed,
-          senderName: currentUser.displayName || 'Sin nombre',
-          clientId: `${conversationId}:${Date.now()}`,
+          senderName: currentUser.displayName,
           queuedAt: Date.now(),
         };
         const entry = await enqueueSyncAction('chat:sendMessage', payload);
@@ -178,19 +205,17 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
         return;
       }
 
-      let attachmentPayload = { attachmentURL: null, attachmentType: null };
-      if (attachment) {
-        attachmentPayload = await uploadAttachment(attachment);
-      }
-
+      const attachments = attachment ? [await uploadAttachment(attachment, messageId)] : [];
       await persistMessage({
         conversationId,
+        messageId,
+        clientId,
         from: currentUser.uid,
         to: partner.uid,
         text: trimmed,
-        senderName: currentUser.displayName || 'Sin nombre',
-        attachmentURL: attachmentPayload.url,
-        attachmentType: attachmentPayload.type,
+        senderName: currentUser.displayName,
+        attachments,
+        localCreatedAt: Date.now(),
       });
       resetComposer();
     } catch (sendError) {
@@ -203,7 +228,9 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
     attachment,
     connectivity.isOffline,
     conversationId,
+    currentUser?.displayName,
     currentUser?.uid,
+    makeMessageId,
     onQueueMessage,
     partner?.uid,
     resetComposer,
@@ -211,44 +238,56 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
     uploadAttachment,
   ]);
 
+  const handleKeyPress = useCallback(
+    (event) => {
+      if (Platform.OS !== 'web') return;
+      const nativeEvent = event?.nativeEvent || {};
+      if (nativeEvent.key === 'Enter' && !nativeEvent.shiftKey) {
+        event.preventDefault?.();
+        handleSend();
+      }
+    },
+    [handleSend]
+  );
+
   const canSend = Boolean(text.trim() || attachment);
 
   return (
     <View style={[styles.container, { borderTopColor: `${borderColor}44`, backgroundColor: background }]}>
-      {connectivity.isOffline && (
-        <View
-          style={[
-            styles.offlineBanner,
-            { borderColor: `${borderColor}44`, backgroundColor: `${borderColor}12` },
-          ]}
-        >
+      {connectivity.isOffline ? (
+        <View style={[styles.offlineBanner, { borderColor: `${borderColor}44`, backgroundColor: `${borderColor}12` }]}>
           <Text style={[styles.offlineText, { color: textColor }]}>
-            Sin conexion, enviaremos cuando vuelva.
+            Sin conexion. Los mensajes de texto se enviaran al reconectar.
           </Text>
         </View>
-      )}
-      {attachment && (
+      ) : null}
+
+      {attachment ? (
         <View style={styles.attachmentPreview}>
-          <Text style={[styles.attachmentLabel, { color: textColor }]}>Adjunto: {attachment.name}</Text>
-          <Pressable onPress={() => setAttachment(null)}>
+          <View style={styles.attachmentInfo}>
+            <MaterialIcons name={attachment.type === 'image' ? 'image' : 'attach-file'} size={18} color={tintColor} />
+            <Text style={[styles.attachmentLabel, { color: textColor }]} numberOfLines={1}>
+              {attachment.name}
+            </Text>
+            {isSending && uploadProgress > 0 ? (
+              <Text style={[styles.progressText, { color: tintColor }]}>{uploadProgress}%</Text>
+            ) : null}
+          </View>
+          <Pressable onPress={() => setAttachment(null)} disabled={isSending}>
             <Text style={[styles.removeAttachment, { color: tintColor }]}>Quitar</Text>
           </Pressable>
         </View>
-      )}
+      ) : null}
+
       <View style={styles.row}>
         <Pressable
           onPress={handlePickAttachment}
           style={[styles.iconButton, { borderColor: `${borderColor}55` }]}
-          disabled={connectivity.isOffline}
+          disabled={connectivity.isOffline || isSending}
+          accessibilityRole="button"
+          accessibilityLabel="Adjuntar archivo"
         >
-          <Text
-            style={[
-              styles.iconButtonText,
-              { color: connectivity.isOffline ? `${tintColor}66` : tintColor },
-            ]}
-          >
-            +
-          </Text>
+          <MaterialIcons name="add" size={21} color={connectivity.isOffline ? `${tintColor}66` : tintColor} />
         </Pressable>
         <TextInput
           style={[styles.input, { color: textColor, borderColor: `${borderColor}55` }]}
@@ -256,6 +295,7 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
           placeholderTextColor={`${borderColor}aa`}
           value={text}
           onChangeText={handleChangeText}
+          onKeyPress={handleKeyPress}
           multiline
         />
         <Pressable
@@ -268,8 +308,14 @@ export function MessageInput({ conversationId, currentUser, partner, onQueueMess
               opacity: isSending || !canSend ? 0.5 : 1,
             },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Enviar mensaje"
         >
-          <Text style={styles.sendButtonText}>Enviar</Text>
+          {isSending ? (
+            <Text style={styles.sendButtonText}>...</Text>
+          ) : (
+            <MaterialIcons name="send" size={18} color="#fff" />
+          )}
         </Pressable>
       </View>
       {error ? <Text style={[styles.errorText, { color: tintColor }]}>{error}</Text> : null}
@@ -300,50 +346,62 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconButtonText: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 42,
     maxHeight: 120,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    outlineStyle: 'none',
   },
   sendButton: {
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sendButtonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '800',
   },
   errorText: {
     marginTop: 6,
     fontSize: 12,
+    fontWeight: '700',
   },
   attachmentPreview: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 8,
   },
+  attachmentInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   attachmentLabel: {
+    flex: 1,
     fontSize: 13,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   removeAttachment: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

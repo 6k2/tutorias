@@ -7,10 +7,16 @@ const rtdb = admin.database();
 
 interface MessagePayload {
   conversationId: string;
+  clientId?: string | null;
   from: string;
   to: string;
   text?: string | null;
   attachmentType?: string | null;
+  attachments?: Array<{
+    type?: string | null;
+    name?: string | null;
+    url?: string | null;
+  }>;
   senderName?: string | null;
   notified?: boolean;
 }
@@ -56,12 +62,40 @@ export const onAuthCreate = functions.auth.user().onCreate(async (user) => {
 export const onMessageCreate = functions.firestore
   .document('conversations/{conversationId}/messages/{messageId}')
   .onCreate(async (snapshot, context) => {
+    // Optional Blaze-only mirror. Spark/free clients already update this summary with writeBatch.
     const payload = snapshot.data() as MessagePayload | undefined;
     if (!payload) return null;
-    if (payload.notified) return null;
 
     const recipient = payload.to;
     if (!recipient) return null;
+    const attachment = Array.isArray(payload.attachments) ? payload.attachments[0] : null;
+    const attachmentType = payload.attachmentType || attachment?.type || null;
+    const preview =
+      payload.text ||
+      (attachmentType === 'image'
+        ? 'Foto'
+        : attachmentType
+        ? attachment?.name || 'Archivo'
+        : 'Nuevo mensaje');
+
+    await db.collection('conversations').doc(context.params.conversationId).set(
+      {
+        lastMessage: preview,
+        lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        unreadBy: admin.firestore.FieldValue.arrayUnion(recipient),
+        lastMessageMeta: {
+          from: payload.from,
+          senderName: payload.senderName || null,
+          type: attachmentType ? 'attachment' : 'text',
+          messageId: context.params.messageId,
+          clientId: payload.clientId || null,
+        },
+      },
+      { merge: true }
+    );
+
+    if (payload.notified) return null;
 
     const presenceSnap = await rtdb.ref(`status/${recipient}`).get();
     const isOnline = presenceSnap.exists() && Boolean(presenceSnap.val()?.online);
@@ -79,9 +113,9 @@ export const onMessageCreate = functions.firestore
     const notificationTitle = payload.senderName || 'Tutorias';
     const notificationBody =
       payload.text ||
-      (payload.attachmentType === 'image'
+      (attachmentType === 'image'
         ? 'Te enviaron una foto'
-        : payload.attachmentType
+        : attachmentType
         ? 'Te enviaron un archivo'
         : 'Nuevo mensaje');
 

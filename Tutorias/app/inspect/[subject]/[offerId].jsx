@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 import { doc, getDoc, runTransaction, collection, query, where, onSnapshot, serverTimestamp, addDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useTopAlert } from '../../../components/TopAlert';
