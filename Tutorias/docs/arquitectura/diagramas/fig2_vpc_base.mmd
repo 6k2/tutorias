@@ -1,0 +1,46 @@
+flowchart TB
+  U["Estudiantes y docentes<br/>Expo web y móvil"]
+  SDK["Firebase SDK<br/>Acceso desde la aplicación"]
+  H["Firebase Hosting<br/>Publicación web propuesta"]
+
+  subgraph GOOGLE["Firebase / Google Cloud · servicios fuera de la VPC"]
+    direction TB
+    ENDPOINTS["Endpoints de Firebase"]
+    AU["Authentication<br/>Identidad"]
+    FS["Cloud Firestore<br/>Ofertas, reservas, chat y materiales"]
+    RT["Realtime Database<br/>Presencia y escritura en curso"]
+    ST["Cloud Storage<br/>Archivos y avatares"]
+    CF["Cloud Functions<br/>Procesa eventos y actualiza Firestore"]
+    FC["Cloud Messaging<br/>Envío desde Functions"]
+
+    ENDPOINTS --> AU & FS & RT & ST
+    AU & FS -->|Eventos| CF
+    CF --> FC
+  end
+
+  subgraph VPC["tutorias-vpc propuesta · 10.20.0.0/16 · us-central1"]
+    direction TB
+    W["Web<br/>10.20.1.0/24"]
+    A["Aplicación<br/>10.20.2.0/24"]
+    D["Acceso a Datos<br/>10.20.3.0/24"]
+    M["Administración<br/>10.20.4.0/24"]
+    C["Conector Serverless VPC<br/>Rango separado 10.20.5.0/28"]
+  end
+
+  U --> SDK
+  SDK --> GOOGLE
+  H -. Entrega frontend .-> SDK
+  GOOGLE -. Egreso de Functions previsto .-> VPC
+  C -. Destinos privados previstos .-> A
+  C ~~~ W
+  C ~~~ D
+  C ~~~ M
+
+  classDef client fill:#e8f1fb,stroke:#2f6db5,color:#102a43;
+  classDef managed fill:#e3f4ec,stroke:#28745a,color:#173b30;
+  classDef proposal fill:#fff3de,stroke:#966016,color:#4c330e;
+  class U,SDK client;
+  class ENDPOINTS,AU,FS,RT,ST,CF,FC managed;
+  class H,W,A,D,M,C proposal;
+  style GOOGLE fill:#f3f9f5,stroke:#7ba893,color:#173b30
+  style VPC fill:#fffbf0,stroke:#b89254,color:#4c330e

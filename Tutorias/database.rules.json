@@ -15,7 +15,6 @@
       }
     },
     ".read": false,
-    ".write": false,
-    "_todo": "Limitar lecturas a participantes cuando guardemos metadata adicional"
+    ".write": false
   }
 }
